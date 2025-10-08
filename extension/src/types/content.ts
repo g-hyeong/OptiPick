@@ -19,18 +19,6 @@ export interface ExtractedImage {
 }
 
 /**
- * 추출된 비디오 요소
- */
-export interface ExtractedVideo {
-  src: string;
-  poster: string;
-  width: number;
-  height: number;
-  duration: number;
-  position: number;
-}
-
-/**
  * 페이지에서 추출된 전체 콘텐츠
  */
 export interface ExtractedContent {
@@ -42,8 +30,6 @@ export interface ExtractedContent {
   texts: ExtractedText[];
   /** 추출된 이미지 목록 */
   images: ExtractedImage[];
-  /** 추출된 비디오 목록 */
-  videos: ExtractedVideo[];
   /** 추출 시점 */
   timestamp: number;
 }

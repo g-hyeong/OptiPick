@@ -74,10 +74,6 @@ function displayResult(
         <div class="stat-label">Images</div>
         <div class="stat-value">${content.images.length}</div>
       </div>
-      <div class="stat-item">
-        <div class="stat-label">Videos</div>
-        <div class="stat-value">${content.videos.length}</div>
-      </div>
     </div>
   `;
 
@@ -109,9 +105,6 @@ function displayResult(
 
     <h3 style="margin-top: 12px;">All Texts</h3>
     <pre>${JSON.stringify(content.texts, null, 2)}</pre>
-
-    <h3 style="margin-top: 12px;">All Videos</h3>
-    <pre>${JSON.stringify(content.videos, null, 2)}</pre>
   `;
 
   container.innerHTML = `

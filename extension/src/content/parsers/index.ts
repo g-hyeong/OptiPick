@@ -1,7 +1,6 @@
 import type { ExtractedContent, ParserOptions } from '@/types/content';
 import { extractTexts } from './textParser';
 import { extractImages } from './imageParser';
-import { extractVideos } from './videoParser';
 
 /**
  * 페이지의 모든 콘텐츠 추출
@@ -14,7 +13,6 @@ export function extractPageContent(
     title: document.title,
     texts: extractTexts(options),
     images: extractImages(options),
-    videos: extractVideos(options),
     timestamp: Date.now(),
   };
 }
@@ -22,4 +20,3 @@ export function extractPageContent(
 // 개별 파서 export
 export { extractTexts } from './textParser';
 export { extractImages } from './imageParser';
-export { extractVideos } from './videoParser';

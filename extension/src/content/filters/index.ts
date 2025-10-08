@@ -11,10 +11,3 @@ export {
   shouldExtractImage,
   IMAGE_FILTER_DEFAULTS,
 } from './imageFilter';
-
-// 비디오 필터
-export {
-  isValidVideo,
-  shouldExtractVideo,
-  VIDEO_FILTER_DEFAULTS,
-} from './videoFilter';
