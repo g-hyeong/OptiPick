@@ -1,0 +1,45 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Extension
+extension/node_modules/
+extension/dist/
+extension/.env
+extension/.env.local
+
+# API Server
+api-server/build/
+api-server/.gradle/
+api-server/out/
+api-server/.env
+
+# Agent
+agent/.venv/
+agent/__pycache__/
+agent/*.pyc
+agent/.env
+agent/.python-version
+
+# Data Pipeline
+data-pipeline/.venv/
+data-pipeline/__pycache__/
+data-pipeline/*.pyc
+data-pipeline/.env
+data-pipeline/.python-version
+
+# Shared
+*.log
+*.tmp
+.env
+.env.local
+
+# Docker
+docker-compose.override.yml
