@@ -18,6 +18,13 @@ class BaseSettings(PydanticBaseSettings):
     log_level: str = "INFO"
     log_format: str = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 
+    # LLM 기본 설정
+    default_llm_provider: str = "openai"
+    default_llm_model: str = "gpt-4o"
+    default_temperature: float = 0.7
+    default_max_tokens: int = 2048
+    default_llm_timeout: int = 60
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
