@@ -19,13 +19,25 @@ class ExtractedImageSchema(BaseModel):
     width: int = Field(..., description="너비 (픽셀)")
     height: int = Field(..., description="높이 (픽셀)")
     position: int = Field(..., description="페이지 상단으로부터 픽셀 거리")
+    ocr_result: str = Field(default="", description="OCR로 추출된 텍스트 (optional)")
 
 
-class OCRResultSchema(BaseModel):
-    """OCR 처리 결과"""
+class ProductAnalysisSchema(BaseModel):
+    """제품 분석 결과"""
 
-    src: str = Field(..., description="원본 이미지 URL")
-    text: str = Field(..., description="추출된 텍스트")
+    product_name: str = Field(..., description="제품명")
+    summary: str = Field(..., description="간단 요약")
+    price: str = Field(..., description="가격")
+    key_features: list[str] = Field(default_factory=list, description="주요 특징")
+    pros: list[str] = Field(default_factory=list, description="장점")
+    cons: list[str] = Field(default_factory=list, description="단점")
+    recommended_for: str = Field(..., description="추천 대상")
+    recommendation_reasons: list[str] = Field(
+        default_factory=list, description="추천 이유"
+    )
+    not_recommended_reasons: list[str] = Field(
+        default_factory=list, description="비추천 이유"
+    )
 
 
 class SummarizePageRequest(BaseModel):
@@ -47,13 +59,10 @@ class SummarizePageResponse(BaseModel):
 
     url: str = Field(..., description="페이지 URL")
     title: str = Field(..., description="페이지 제목")
-    texts: list[ExtractedTextSchema] = Field(
-        default_factory=list, description="추출된 텍스트 목록"
+    valid_images: list[ExtractedImageSchema] = Field(
+        default_factory=list, description="유효한 이미지 목록 (OCR 결과 포함)"
     )
-    images: list[ExtractedImageSchema] = Field(
-        default_factory=list, description="추출된 이미지 목록"
-    )
-    ocr_results: list[OCRResultSchema] = Field(
-        default_factory=list, description="OCR 처리 결과"
+    product_analysis: ProductAnalysisSchema = Field(
+        ..., description="제품 분석 결과"
     )
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
