@@ -10,19 +10,14 @@ class ExtractedText(TypedDict):
     position: int  # 페이지 상단으로부터 픽셀 거리
 
 
-class ExtractedImage(TypedDict):
+class ExtractedImage(TypedDict, total=False):
     """추출된 이미지"""
     src: str  # 이미지 URL (절대 경로)
     alt: str  # 대체 텍스트
     width: int  # 너비 (픽셀)
     height: int  # 높이 (픽셀)
     position: int  # 페이지 상단으로부터 픽셀 거리
-
-
-class OCRResult(TypedDict):
-    """OCR 처리 결과"""
-    src: str  # 원본 이미지 URL
-    text: str  # 추출된 텍스트
+    ocr_result: str  # OCR로 추출된 텍스트 (optional)
 
 
 class SummarizePageState(TypedDict):
@@ -34,5 +29,5 @@ class SummarizePageState(TypedDict):
     images: list[ExtractedImage]
     timestamp: int
 
-    # OCR 처리 결과
-    ocr_results: list[OCRResult]
+    # 필터링된 유효한 이미지들
+    valid_images: list[ExtractedImage]

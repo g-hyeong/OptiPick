@@ -10,7 +10,7 @@ from src.utils.logger import get_logger
 
 from ..config import SummarizePageSettings
 from ..exceptions import ImageURLError, OCRAPIError, OCRParseError
-from ..state import ExtractedImage, OCRResult, SummarizePageState
+from ..state import ExtractedImage, SummarizePageState
 
 logger = get_logger(__name__)
 settings = SummarizePageSettings()
@@ -36,8 +36,8 @@ class OCRService:
                 details={"value": self.settings.ocr_max_concurrent},
             )
 
-    async def perform_ocr(self, image: ExtractedImage) -> OCRResult | None:
-        """단일 이미지 OCR 수행"""
+    async def perform_ocr(self, image: ExtractedImage) -> str | None:
+        """단일 이미지 OCR 수행 - OCR 결과 텍스트 반환"""
         try:
             # URL 유효성 검증
             if not image["src"].startswith(("http://", "https://")):
@@ -105,7 +105,7 @@ class OCRService:
             )
             return None
 
-    def _parse_ocr_result(self, result: dict, image_url: str) -> OCRResult:
+    def _parse_ocr_result(self, result: dict, image_url: str) -> str:
         """OCR API 응답 파싱"""
         try:
             ocr_exit_code = result.get("OCRExitCode")
@@ -148,7 +148,7 @@ class OCRService:
 
                 parsed_text = first_result.get("ParsedText", "")
 
-                return OCRResult(src=image_url, text=parsed_text.strip())
+                return parsed_text.strip()
 
             # 알 수 없는 상태
             raise OCRAPIError(
@@ -166,11 +166,11 @@ class OCRService:
                 details={"url": image_url, "result": result},
             )
 
-    async def process_images(self, images: List[ExtractedImage]) -> List[OCRResult]:
-        """여러 이미지를 병렬로 OCR 처리"""
+    async def process_images(self, images: List[ExtractedImage]) -> List[ExtractedImage]:
+        """여러 이미지를 병렬로 OCR 처리하고 각 이미지에 ocr_result 필드 추가"""
         if not images:
             logger.info("No images to process")
-            return []
+            return images
 
         semaphore = asyncio.Semaphore(self.settings.ocr_max_concurrent)
 
@@ -183,24 +183,36 @@ class OCRService:
         tasks = [bounded_ocr(img) for img in images]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 성공한 결과만 필터링
-        successful_results = []
+        # 이미지에 OCR 결과 추가
+        processed_images = []
+        successful_count = 0
         failed_count = 0
 
-        for result in results:
-            if isinstance(result, dict) and "src" in result and "text" in result:
-                successful_results.append(result)
+        for image, result in zip(images, results):
+            # 이미지 복사 (원본 보존)
+            processed_image = image.copy()
+
+            if isinstance(result, str) and result:
+                # OCR 성공
+                processed_image["ocr_result"] = result
+                successful_count += 1
             elif isinstance(result, Exception):
+                # OCR 실패 (예외)
                 failed_count += 1
-                logger.error(f"OCR task failed with exception: {result}")
-            elif result is None:
+                logger.error(f"OCR task failed with exception for {image['src']}: {result}")
+                processed_image["ocr_result"] = ""
+            else:
+                # OCR 실패 (None)
                 failed_count += 1
+                processed_image["ocr_result"] = ""
+
+            processed_images.append(processed_image)
 
         logger.info(
-            f"OCR completed: {len(successful_results)} successful, {failed_count} failed"
+            f"OCR completed: {successful_count} successful, {failed_count} failed"
         )
 
-        return successful_results
+        return processed_images
 
 
 async def ocr_node(state: SummarizePageState) -> dict:
@@ -211,10 +223,10 @@ async def ocr_node(state: SummarizePageState) -> dict:
 
         # OCR 서비스 초기화 및 실행
         ocr_service = OCRService(settings)
-        ocr_results = await ocr_service.process_images(images)
+        processed_images = await ocr_service.process_images(images)
 
         # 통계 로깅
-        ocr_texts = [result["text"] for result in ocr_results if result.get("text")]
+        ocr_texts = [img.get("ocr_result", "") for img in processed_images if img.get("ocr_result")]
         total_chars = sum(len(text) for text in ocr_texts)
         logger.info(
             f"OCR extraction completed",
@@ -226,7 +238,7 @@ async def ocr_node(state: SummarizePageState) -> dict:
             },
         )
 
-        return {"ocr_results": ocr_results}
+        return {"images": processed_images}
 
     except ConfigurationError as e:
         # 설정 오류는 fail fast
@@ -234,6 +246,6 @@ async def ocr_node(state: SummarizePageState) -> dict:
         raise
 
     except Exception as e:
-        # 예상치 못한 오류는 로깅 후 빈 결과 반환
+        # 예상치 못한 오류는 로깅 후 원본 이미지 반환
         logger.error(f"Unexpected error in OCR node: {str(e)}")
-        return {"ocr_results": []}
+        return {"images": state["images"]}
