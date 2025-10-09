@@ -98,10 +98,13 @@ function displayResult(
     <h3 style="margin-top: 12px;">Title</h3>
     <pre>${content.title}</pre>
 
-    <h3 style="margin-top: 12px;">All Images (${content.images.length})</h3>
+    <h3 style="margin-top: 12px;">Images Preview (${content.images.length})</h3>
     <div class="images-gallery">
       ${imagesGallery}
     </div>
+
+    <h3 style="margin-top: 12px;">All Images</h3>
+    <pre>${JSON.stringify(content.images, null, 2)}</pre>
 
     <h3 style="margin-top: 12px;">All Texts</h3>
     <pre>${JSON.stringify(content.texts, null, 2)}</pre>
