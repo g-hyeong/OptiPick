@@ -207,10 +207,24 @@ def ocr_node(state: SummarizePageState) -> dict:
     """이미지 리스트를 받아 OCR 수행하는 노드"""
     try:
         images = state["images"]
+        logger.info(f"OCR node started with {len(images)} images")
 
         # OCR 서비스 초기화 및 실행
         ocr_service = OCRService(settings)
         ocr_results = asyncio.run(ocr_service.process_images(images))
+
+        # 통계 로깅
+        ocr_texts = [result["text"] for result in ocr_results if result.get("text")]
+        total_chars = sum(len(text) for text in ocr_texts)
+        logger.info(
+            f"OCR extraction completed",
+            extra={
+                "total_images": len(images),
+                "successful_extractions": len(ocr_texts),
+                "total_characters": total_chars,
+                "avg_chars_per_image": total_chars // len(ocr_texts) if ocr_texts else 0,
+            },
+        )
 
         return {"ocr_results": ocr_results}
 

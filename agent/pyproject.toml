@@ -33,3 +33,6 @@ dev-dependencies = [
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = ["-v"]
+
+[project.scripts]
+agent-server = "src.api.server:main"
