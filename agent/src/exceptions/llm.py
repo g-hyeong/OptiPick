@@ -1,9 +1,9 @@
 """LLM 관련 예외"""
 
-from .base import BaseException
+from .base import AgentBaseException
 
 
-class LLMError(BaseException):
+class LLMError(AgentBaseException):
     """LLM 관련 기본 예외"""
 
 
