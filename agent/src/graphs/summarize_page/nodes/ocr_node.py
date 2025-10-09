@@ -45,6 +45,11 @@ class OCRService:
                     "Invalid image URL format", details={"url": image["src"]}
                 )
 
+            # GIF 파일 스킵 (OCR API가 지원하지 않음)
+            if image["src"].lower().endswith(".gif"):
+                logger.debug(f"Skipping GIF image: {image['src']}")
+                return None
+
             params = {
                 "apikey": self.settings.ocr_api_key,
                 "url": image["src"],
@@ -149,6 +154,15 @@ class OCRService:
                 parsed_text = first_result.get("ParsedText", "")
 
                 return parsed_text.strip()
+
+            # OCR API 에러 코드 99: 지원하지 않는 형식 (GIF 등)
+            if ocr_exit_code_str == "99":
+                error_message = result.get("ErrorMessage", [])
+                logger.warning(
+                    f"OCR unsupported format: {error_message}",
+                    extra={"url": image_url}
+                )
+                return None
 
             # 알 수 없는 상태
             raise OCRAPIError(
