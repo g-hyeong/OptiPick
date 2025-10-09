@@ -46,7 +46,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
 
         # 그래프 실행
         graph = create_graph()
-        result = graph.invoke(state_input)
+        result = await graph.ainvoke(state_input)
 
         # 실행 시간 로깅
         execution_time = time.time() - start_time

@@ -203,7 +203,7 @@ class OCRService:
         return successful_results
 
 
-def ocr_node(state: SummarizePageState) -> dict:
+async def ocr_node(state: SummarizePageState) -> dict:
     """이미지 리스트를 받아 OCR 수행하는 노드"""
     try:
         images = state["images"]
@@ -211,7 +211,7 @@ def ocr_node(state: SummarizePageState) -> dict:
 
         # OCR 서비스 초기화 및 실행
         ocr_service = OCRService(settings)
-        ocr_results = asyncio.run(ocr_service.process_images(images))
+        ocr_results = await ocr_service.process_images(images)
 
         # 통계 로깅
         ocr_texts = [result["text"] for result in ocr_results if result.get("text")]
