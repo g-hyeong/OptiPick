@@ -10,6 +10,9 @@ class BaseSettings(PydanticBaseSettings):
     ocr_api_key: str
     ocr_api_endpoint: str = "https://api.ocr.space/parse/image"
 
+    # Google AI API 설정
+    google_api_key: str
+
     # HTTP 설정
     http_timeout: int = 30
     http_max_retries: int = 3
@@ -19,8 +22,8 @@ class BaseSettings(PydanticBaseSettings):
     log_format: str = "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 
     # LLM 기본 설정
-    default_llm_provider: str = "openai"
-    default_llm_model: str = "gpt-4o"
+    default_llm_provider: str = "google_genai"
+    default_llm_model: str = "gemini-2.5-flash"
     default_temperature: float = 0.7
     default_max_tokens: int = 2048
     default_llm_timeout: int = 60
