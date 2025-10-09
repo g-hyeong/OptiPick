@@ -14,8 +14,8 @@ class ExtractedImage(TypedDict, total=False):
     """추출된 이미지"""
     src: str  # 이미지 URL (절대 경로)
     alt: str  # 대체 텍스트
-    width: int  # 너비 (픽셀)
-    height: int  # 높이 (픽셀)
+    width: float  # 너비 (픽셀)
+    height: float  # 높이 (픽셀)
     position: float  # 페이지 상단으로부터 픽셀 거리
     ocr_result: str  # OCR로 추출된 텍스트 (optional)
 

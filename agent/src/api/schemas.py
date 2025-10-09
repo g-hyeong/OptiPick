@@ -16,8 +16,8 @@ class ExtractedImageSchema(BaseModel):
 
     src: str = Field(..., description="이미지 URL (절대 경로)")
     alt: str = Field(..., description="대체 텍스트")
-    width: int = Field(..., description="너비 (픽셀)")
-    height: int = Field(..., description="높이 (픽셀)")
+    width: float = Field(..., description="너비 (픽셀)")
+    height: float = Field(..., description="높이 (픽셀)")
     position: float = Field(..., description="페이지 상단으로부터 픽셀 거리")
     ocr_result: str = Field(default="", description="OCR로 추출된 텍스트 (optional)")
 
