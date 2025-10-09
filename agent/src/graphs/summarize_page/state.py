@@ -20,6 +20,19 @@ class ExtractedImage(TypedDict, total=False):
     ocr_result: str  # OCR로 추출된 텍스트 (optional)
 
 
+class ProductAnalysis(TypedDict):
+    """제품 분석 결과"""
+    product_name: str  # 제품명
+    summary: str  # 간단 요약
+    price: str  # 가격
+    key_features: list[str]  # 주요 특징
+    pros: list[str]  # 장점
+    cons: list[str]  # 단점
+    recommended_for: str  # 추천 대상
+    recommendation_reasons: list[str]  # 추천 이유
+    not_recommended_reasons: list[str]  # 비추천 이유
+
+
 class SummarizePageState(TypedDict):
     """SummarizePage 그래프의 State"""
     # Extension으로부터 받는 입력
@@ -31,3 +44,6 @@ class SummarizePageState(TypedDict):
 
     # 필터링된 유효한 이미지들
     valid_images: list[ExtractedImage]
+
+    # 제품 분석 결과
+    product_analysis: ProductAnalysis
