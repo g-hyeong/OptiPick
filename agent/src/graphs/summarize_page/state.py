@@ -7,7 +7,7 @@ class ExtractedText(TypedDict):
     """추출된 텍스트"""
     content: str  # 텍스트 내용
     tagName: str  # HTML 태그명
-    position: int  # 페이지 상단으로부터 픽셀 거리
+    position: float  # 페이지 상단으로부터 픽셀 거리
 
 
 class ExtractedImage(TypedDict, total=False):
@@ -16,7 +16,7 @@ class ExtractedImage(TypedDict, total=False):
     alt: str  # 대체 텍스트
     width: int  # 너비 (픽셀)
     height: int  # 높이 (픽셀)
-    position: int  # 페이지 상단으로부터 픽셀 거리
+    position: float  # 페이지 상단으로부터 픽셀 거리
     ocr_result: str  # OCR로 추출된 텍스트 (optional)
 
 
