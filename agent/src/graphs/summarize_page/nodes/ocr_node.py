@@ -45,11 +45,6 @@ class OCRService:
                     "Invalid image URL format", details={"url": image["src"]}
                 )
 
-            # GIF 파일 스킵 (OCR API가 지원하지 않음)
-            if image["src"].lower().endswith(".gif"):
-                logger.debug(f"Skipping GIF image: {image['src']}")
-                return None
-
             params = {
                 "apikey": self.settings.ocr_api_key,
                 "url": image["src"],
@@ -106,7 +101,13 @@ class OCRService:
 
         except Exception as e:
             logger.error(
-                f"Unexpected error during OCR: {str(e)}", extra={"url": image["src"]}
+                f"Unexpected error during OCR: {str(e)}",
+                extra={
+                    "url": image["src"],
+                    "error_type": type(e).__name__,
+                    "error_detail": str(e)
+                },
+                exc_info=True  # 스택 트레이스 포함
             )
             return None
 
@@ -157,12 +158,10 @@ class OCRService:
 
             # OCR API 에러 코드 99: 지원하지 않는 형식 (GIF 등)
             if ocr_exit_code_str == "99":
-                error_message = result.get("ErrorMessage", [])
-                logger.warning(
-                    f"OCR unsupported format: {error_message}",
-                    extra={"url": image_url}
+                logger.debug(
+                    f"    OCR unsupported format (likely GIF): {image_url[:50]}..."
                 )
-                return None
+                return ""  # 빈 문자열 반환 (스킵 처리)
 
             # 알 수 없는 상태
             raise OCRAPIError(
@@ -183,9 +182,10 @@ class OCRService:
     async def process_images(self, images: List[ExtractedImage]) -> List[ExtractedImage]:
         """여러 이미지를 병렬로 OCR 처리하고 각 이미지에 ocr_result 필드 추가"""
         if not images:
-            logger.info("No images to process")
+            logger.info("  No images to process, skipping OCR")
             return images
 
+        logger.info(f"  Processing {len(images)} images (max concurrent: {self.settings.ocr_max_concurrent})")
         semaphore = asyncio.Semaphore(self.settings.ocr_max_concurrent)
 
         async def bounded_ocr(image: ExtractedImage):
@@ -223,7 +223,7 @@ class OCRService:
             processed_images.append(processed_image)
 
         logger.info(
-            f"OCR completed: {successful_count} successful, {failed_count} failed"
+            f"  OCR completed: {successful_count} success, {failed_count} failed"
         )
 
         return processed_images
@@ -233,7 +233,8 @@ async def ocr_node(state: SummarizePageState) -> dict:
     """이미지 리스트를 받아 OCR 수행하는 노드"""
     try:
         images = state["images"]
-        logger.info(f"OCR node started with {len(images)} images")
+        logger.info(f"━━━ OCR Node ━━━")
+        logger.info(f"  Input: {len(images)} images")
 
         # OCR 서비스 초기화 및 실행
         ocr_service = OCRService(settings)

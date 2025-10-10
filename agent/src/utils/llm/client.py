@@ -1,17 +1,28 @@
 """LLM 클라이언트 - multi-provider LLM 호출을 위한 통합 인터페이스"""
 
+import json
+import os
 import time
 from typing import Any, Dict, List, Optional, Type, Union
 
+import json_repair
+from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from src.exceptions.llm import LLMConfigurationError, LLMInvocationError, LLMProviderError
 from src.utils.logger import get_logger
 
 from .formatters import get_formatter
+
+# .env 파일 로드
+load_dotenv()
+
+# Google gRPC ALTS 경고 억제
+os.environ["GRPC_VERBOSITY"] = "ERROR"
+os.environ["GRPC_TRACE"] = ""
 
 logger = get_logger(__name__)
 
@@ -59,6 +70,25 @@ class LLMClient:
                 "model": self.model_name,
                 "model_provider": self.provider,
             }
+
+            # Google Gemini의 경우 API 키 명시적 전달 + Safety Settings 해제
+            if self.provider == "google_genai":
+                google_api_key = os.getenv("GOOGLE_API_KEY")
+                if not google_api_key:
+                    raise LLMConfigurationError(
+                        "GOOGLE_API_KEY not found in environment variables",
+                        details={"provider": self.provider}
+                    )
+                init_params["api_key"] = google_api_key
+
+                # Safety filters 전부 해제
+                from langchain_google_genai import HarmBlockThreshold, HarmCategory
+                init_params["safety_settings"] = {
+                    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                }
 
             # 선택적 파라미터 추가
             if self.temperature is not None:
@@ -140,28 +170,117 @@ class LLMClient:
         try:
             start_time = time.time()
 
-            # Pydantic 모델을 직접 전달한 경우 - with_structured_output 사용
+            # Pydantic 모델을 직접 전달한 경우 - 직접 JSON 파싱 수행
             if isinstance(output_format, type) and issubclass(output_format, BaseModel):
+                # 프롬프트 크기 계산
+                prompt_size = sum(len(str(msg.get("content", ""))) for msg in messages)
                 logger.info(
-                    "Invoking LLM with structured output",
+                    f"▶ LLM Request: {output_format.__name__}",
                     extra={
-                        "provider": self.provider,
-                        "model": self.model_name,
-                        "pydantic_model": output_format.__name__,
+                        "model": f"{self.provider}/{self.model_name}",
+                        "prompt_chars": f"{prompt_size:,}",
+                        "messages_count": len(messages),
                     },
                 )
 
-                structured_model = self._model.with_structured_output(output_format)
-                result = await structured_model.ainvoke(messages, **invoke_options)
+                # LLM 호출 (with_structured_output 사용하지 않음)
+                raw_response = await self._model.ainvoke(messages, **invoke_options)
+                raw_content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
 
                 elapsed = time.time() - start_time
+
+                # 빈 응답 체크
+                if not raw_content or raw_content.strip() == "":
+                    logger.error(
+                        f"✗ LLM returned EMPTY response",
+                        extra={
+                            "provider": self.provider,
+                            "model": self.model_name,
+                            "prompt_size": f"{prompt_size:,} chars",
+                            "elapsed": f"{round(elapsed, 2)}s",
+                            "response_type": type(raw_response).__name__,
+                        },
+                    )
+                    raise LLMInvocationError(
+                        "LLM returned empty response",
+                        details={
+                            "provider": self.provider,
+                            "model": self.model_name,
+                            "prompt_size": prompt_size,
+                        },
+                    )
+
+                logger.debug(
+                    f"  LLM response received ({round(elapsed, 2)}s)",
+                    extra={"content_length": len(raw_content)},
+                )
+
+                # JSON 파싱 시도
+                try:
+                    # 1. 먼저 표준 JSON 파싱 시도
+                    parsed_json = json.loads(raw_content)
+                    logger.debug("  JSON parsing: OK")
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"  JSON parsing failed (line {e.lineno}, col {e.colno}), attempting repair..."
+                    )
+
+                    try:
+                        # 2. json-repair로 복구 시도
+                        repaired_content = json_repair.repair_json(raw_content)
+                        parsed_json = json.loads(repaired_content)
+                        logger.info("  JSON repair: SUCCESS")
+                    except Exception as repair_error:
+                        logger.error(
+                            f"✗ JSON repair FAILED: {str(repair_error)}",
+                            extra={"raw_content_preview": raw_content[:200]},
+                        )
+                        raise LLMInvocationError(
+                            f"Failed to parse LLM response as JSON: {str(repair_error)}",
+                            details={
+                                "provider": self.provider,
+                                "model": self.model_name,
+                                "raw_content": raw_content[:500],
+                            },
+                        )
+
+                # 3. Pydantic 모델로 변환 시도
+                try:
+                    result = output_format(**parsed_json)
+                    logger.debug("  Pydantic validation: OK")
+                except ValidationError as e:
+                    # 필드별 에러 상세 로깅
+                    missing_fields = []
+                    invalid_fields = []
+
+                    for error in e.errors():
+                        field = ".".join(str(loc) for loc in error["loc"])
+                        error_type = error["type"]
+
+                        if error_type == "missing":
+                            missing_fields.append(field)
+                        else:
+                            invalid_fields.append(f"{field} ({error_type})")
+
+                    logger.error(
+                        f"✗ Pydantic validation FAILED",
+                        extra={
+                            "missing": missing_fields,
+                            "invalid": invalid_fields,
+                            "received_keys": list(parsed_json.keys()) if isinstance(parsed_json, dict) else "not_a_dict",
+                        },
+                    )
+                    raise LLMInvocationError(
+                        f"LLM response validation failed: missing={missing_fields}, invalid={invalid_fields}",
+                        details={
+                            "provider": self.provider,
+                            "model": self.model_name,
+                            "validation_errors": e.errors(),
+                        },
+                    )
+
                 logger.info(
-                    "LLM invocation successful (structured)",
-                    extra={
-                        "provider": self.provider,
-                        "model": self.model_name,
-                        "elapsed_seconds": round(elapsed, 2),
-                    },
+                    f"✓ LLM Response: {output_format.__name__} ({round(elapsed, 2)}s)"
                 )
 
                 return result

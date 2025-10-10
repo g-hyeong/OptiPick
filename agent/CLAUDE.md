@@ -87,7 +87,7 @@ async def ocr_node(state: SummarizePageState) -> dict:
 
 **기본 설정:**
 - Provider: `google_genai`
-- Model: `gemini-2.5-flash`
+- Model: `gemini-2.0-flash`
 - Temperature: `0.7`
 
 **사용 예시:**
@@ -95,7 +95,7 @@ async def ocr_node(state: SummarizePageState) -> dict:
 from src.utils.llm import LLMClient
 
 # 기본 사용
-llm = LLMClient(provider="google_genai", model="gemini-2.5-flash")
+llm = LLMClient(provider="google_genai", model="gemini-2.0-flash")
 result = await llm.invoke(
     messages=[{"role": "user", "content": "..."}],
     output_format="json"

@@ -23,7 +23,7 @@ class BaseSettings(PydanticBaseSettings):
 
     # LLM 기본 설정
     default_llm_provider: str = "google_genai"
-    default_llm_model: str = "gemini-2.5-flash"
+    default_llm_model: str = "gemini-2.0-flash"
     default_temperature: float = 0.7
     default_max_tokens: int = 2048
     default_llm_timeout: int = 60
