@@ -29,6 +29,7 @@ agent/__pycache__/
 agent/*.pyc
 agent/.env
 agent/.python-version
+agent/logs/
 
 # Data Pipeline
 data-pipeline/.venv/

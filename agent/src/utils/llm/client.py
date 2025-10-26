@@ -3,6 +3,9 @@
 import json
 import os
 import time
+import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 import json_repair
@@ -25,6 +28,40 @@ os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GRPC_TRACE"] = ""
 
 logger = get_logger(__name__)
+
+# Logs 디렉토리 경로
+LOGS_DIR = Path(__file__).parents[3] / "logs"
+
+
+def _save_llm_log(log_data: Dict[str, Any]) -> None:
+    """
+    LLM input/output을 로그 파일로 저장
+
+    Args:
+        log_data: 저장할 로그 데이터
+    """
+    try:
+        # 날짜별 디렉토리 생성
+        today = datetime.now().strftime("%Y-%m-%d")
+        log_dir = LOGS_DIR / today
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 파일명: timestamp_requestId.json
+        timestamp = datetime.now().strftime("%H%M%S")
+        request_id = log_data.get("request_id", "unknown")
+        filename = f"{timestamp}_{request_id[:8]}.json"
+
+        log_file = log_dir / filename
+
+        # JSON으로 저장
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, ensure_ascii=False, indent=2)
+
+        logger.debug(f"Saved LLM log to {log_file}")
+
+    except Exception as e:
+        # 로그 저장 실패는 메인 작업에 영향 주지 않음
+        logger.warning(f"Failed to save LLM log: {str(e)}")
 
 
 class LLMClient:
@@ -167,19 +204,45 @@ class LLMClient:
         if not self._model:
             raise LLMConfigurationError("Model not initialized")
 
+        # 고유 요청 ID 생성
+        request_id = str(uuid.uuid4())
+
+        # 로그 데이터 초기화
+        log_data = {
+            "request_id": request_id,
+            "timestamp": datetime.now().isoformat(),
+            "provider": self.provider,
+            "model": self.model_name,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "output_format": output_format.__name__ if isinstance(output_format, type) else output_format,
+            "input": {
+                "messages": [
+                    {
+                        "role": msg.get("role", "unknown") if isinstance(msg, dict) else getattr(msg, "type", "unknown"),
+                        "content": str(msg.get("content", "")) if isinstance(msg, dict) else str(getattr(msg, "content", ""))
+                    }
+                    for msg in messages
+                ],
+                "messages_count": len(messages),
+                "prompt_chars": sum(len(str(msg.get("content", ""))) for msg in messages) if messages else 0
+            }
+        }
+
         try:
             start_time = time.time()
 
             # Pydantic 모델을 직접 전달한 경우 - 직접 JSON 파싱 수행
             if isinstance(output_format, type) and issubclass(output_format, BaseModel):
                 # 프롬프트 크기 계산
-                prompt_size = sum(len(str(msg.get("content", ""))) for msg in messages)
+                prompt_size = log_data["input"]["prompt_chars"]
                 logger.info(
                     f"▶ LLM Request: {output_format.__name__}",
                     extra={
                         "model": f"{self.provider}/{self.model_name}",
                         "prompt_chars": f"{prompt_size:,}",
                         "messages_count": len(messages),
+                        "request_id": request_id,
                     },
                 )
 
@@ -188,6 +251,13 @@ class LLMClient:
                 raw_content = raw_response.content if hasattr(raw_response, 'content') else str(raw_response)
 
                 elapsed = time.time() - start_time
+
+                # 로그 데이터에 응답 추가
+                log_data["output"] = {
+                    "raw_content": raw_content,
+                    "content_length": len(raw_content) if raw_content else 0
+                }
+                log_data["elapsed_seconds"] = round(elapsed, 2)
 
                 # 빈 응답 체크
                 if not raw_content or raw_content.strip() == "":
@@ -199,8 +269,13 @@ class LLMClient:
                             "prompt_size": f"{prompt_size:,} chars",
                             "elapsed": f"{round(elapsed, 2)}s",
                             "response_type": type(raw_response).__name__,
+                            "request_id": request_id,
                         },
                     )
+                    log_data["status"] = "error"
+                    log_data["error"] = "Empty response"
+                    _save_llm_log(log_data)
+
                     raise LLMInvocationError(
                         "LLM returned empty response",
                         details={
@@ -212,7 +287,7 @@ class LLMClient:
 
                 logger.debug(
                     f"  LLM response received ({round(elapsed, 2)}s)",
-                    extra={"content_length": len(raw_content)},
+                    extra={"content_length": len(raw_content), "request_id": request_id},
                 )
 
                 # JSON 파싱 시도
@@ -220,21 +295,28 @@ class LLMClient:
                     # 1. 먼저 표준 JSON 파싱 시도
                     parsed_json = json.loads(raw_content)
                     logger.debug("  JSON parsing: OK")
+                    log_data["output"]["json_parsing"] = "success"
                 except json.JSONDecodeError as e:
                     logger.warning(
                         f"  JSON parsing failed (line {e.lineno}, col {e.colno}), attempting repair..."
                     )
+                    log_data["output"]["json_parsing"] = "failed_initial"
 
                     try:
                         # 2. json-repair로 복구 시도
                         repaired_content = json_repair.repair_json(raw_content)
                         parsed_json = json.loads(repaired_content)
                         logger.info("  JSON repair: SUCCESS")
+                        log_data["output"]["json_parsing"] = "repaired"
                     except Exception as repair_error:
                         logger.error(
                             f"✗ JSON repair FAILED: {str(repair_error)}",
-                            extra={"raw_content_preview": raw_content[:200]},
+                            extra={"raw_content_preview": raw_content[:200], "request_id": request_id},
                         )
+                        log_data["status"] = "error"
+                        log_data["error"] = f"JSON parsing failed: {str(repair_error)}"
+                        _save_llm_log(log_data)
+
                         raise LLMInvocationError(
                             f"Failed to parse LLM response as JSON: {str(repair_error)}",
                             details={
@@ -244,10 +326,13 @@ class LLMClient:
                             },
                         )
 
+                log_data["output"]["parsed_json"] = parsed_json
+
                 # 3. Pydantic 모델로 변환 시도
                 try:
                     result = output_format(**parsed_json)
                     logger.debug("  Pydantic validation: OK")
+                    log_data["output"]["pydantic_validation"] = "success"
                 except ValidationError as e:
                     # 필드별 에러 상세 로깅
                     missing_fields = []
@@ -268,8 +353,18 @@ class LLMClient:
                             "missing": missing_fields,
                             "invalid": invalid_fields,
                             "received_keys": list(parsed_json.keys()) if isinstance(parsed_json, dict) else "not_a_dict",
+                            "request_id": request_id,
                         },
                     )
+                    log_data["status"] = "error"
+                    log_data["error"] = {
+                        "type": "validation_error",
+                        "missing_fields": missing_fields,
+                        "invalid_fields": invalid_fields
+                    }
+                    log_data["output"]["pydantic_validation"] = "failed"
+                    _save_llm_log(log_data)
+
                     raise LLMInvocationError(
                         f"LLM response validation failed: missing={missing_fields}, invalid={invalid_fields}",
                         details={
@@ -280,8 +375,17 @@ class LLMClient:
                     )
 
                 logger.info(
-                    f"✓ LLM Response: {output_format.__name__} ({round(elapsed, 2)}s)"
+                    f"✓ LLM Response: {output_format.__name__} ({round(elapsed, 2)}s)",
+                    extra={"request_id": request_id}
                 )
+
+                # 성공 로그 저장
+                log_data["status"] = "success"
+                log_data["output"]["result_summary"] = {
+                    "model_name": output_format.__name__,
+                    "fields_count": len(parsed_json) if isinstance(parsed_json, dict) else 0
+                }
+                _save_llm_log(log_data)
 
                 return result
 
@@ -292,6 +396,7 @@ class LLMClient:
                     "provider": self.provider,
                     "model": self.model_name,
                     "output_format": output_format,
+                    "request_id": request_id,
                 },
             )
 
@@ -308,20 +413,43 @@ class LLMClient:
                     "total_tokens": response.usage_metadata.get("total_tokens"),
                 }
 
+            # 응답 내용 추가
+            response_content = response.content if hasattr(response, 'content') else str(response)
+            log_data["output"] = {
+                "content": response_content,
+                "content_length": len(response_content) if response_content else 0,
+                "usage": usage_metadata
+            }
+            log_data["elapsed_seconds"] = round(elapsed, 2)
+            log_data["status"] = "success"
+
             logger.info(
                 "LLM invocation successful",
                 extra={
                     "provider": self.provider,
                     "model": self.model_name,
                     "elapsed_seconds": round(elapsed, 2),
+                    "request_id": request_id,
                     **usage_metadata,
                 },
             )
+
+            # 성공 로그 저장
+            _save_llm_log(log_data)
 
             # 출력 포맷 적용
             return self._apply_format(response, output_format)
 
         except Exception as e:
+            # 에러 로그 저장
+            if "status" not in log_data:
+                log_data["status"] = "error"
+                log_data["error"] = {
+                    "type": type(e).__name__,
+                    "message": str(e)
+                }
+                _save_llm_log(log_data)
+
             raise LLMInvocationError(
                 f"LLM invocation failed: {str(e)}",
                 details={
