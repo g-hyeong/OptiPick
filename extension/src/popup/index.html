@@ -129,8 +129,41 @@
       }
 
       /* 제품 목록 탭 */
+      /* 카테고리 필터 */
+      .category-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px 0;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .category-chip {
+        padding: 6px 16px;
+        border: 1px solid #ddd;
+        border-radius: 20px;
+        background: white;
+        color: #666;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .category-chip:hover {
+        background: #f5f5f5;
+        border-color: #007aff;
+      }
+
+      .category-chip.active {
+        background: #007aff;
+        color: white;
+        border-color: #007aff;
+      }
+
       .products-container {
-        max-height: 500px;
+        max-height: 420px;
         overflow-y: auto;
       }
 
@@ -272,6 +305,107 @@
         background: #c82333;
       }
 
+      /* 제품 상세보기 */
+      .detail-header {
+        padding: 12px 20px;
+        border-bottom: 1px solid #e0e0e0;
+        background: white;
+      }
+
+      .back-btn {
+        padding: 8px 16px;
+        background: white;
+        color: #007aff;
+        border: 1px solid #007aff;
+        border-radius: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .back-btn:hover {
+        background: #007aff;
+        color: white;
+      }
+
+      .detail-content {
+        padding: 20px;
+        max-height: 480px;
+        overflow-y: auto;
+      }
+
+      .detail-thumbnail {
+        width: 100%;
+        max-height: 200px;
+        object-fit: contain;
+        border-radius: 8px;
+        background: #f5f5f5;
+        margin-bottom: 20px;
+      }
+
+      .detail-section {
+        margin-bottom: 24px;
+      }
+
+      .detail-section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 2px solid #007aff;
+      }
+
+      .detail-field {
+        margin-bottom: 12px;
+      }
+
+      .detail-label {
+        font-size: 12px;
+        color: #666;
+        margin-bottom: 4px;
+      }
+
+      .detail-value {
+        font-size: 14px;
+        color: #333;
+        line-height: 1.6;
+      }
+
+      .detail-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .detail-list li {
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #333;
+        line-height: 1.5;
+      }
+
+      .detail-list li:before {
+        content: "•";
+        color: #007aff;
+        font-weight: bold;
+        display: inline-block;
+        width: 1em;
+        margin-left: -1em;
+      }
+
+      .product-card {
+        cursor: pointer;
+      }
+
+      .product-card:active {
+        transform: scale(0.98);
+      }
+
       /* 스크롤바 스타일 */
       ::-webkit-scrollbar {
         width: 8px;
@@ -314,7 +448,23 @@
 
     <!-- 제품 목록 탭 -->
     <div class="tab-content hidden" id="productsTab">
+      <!-- 카테고리 필터 -->
+      <div class="category-filters" id="categoryFilters">
+        <!-- 동적으로 렌더링됨 -->
+      </div>
+
+      <!-- 제품 목록 -->
       <div class="products-container" id="productsContainer">
+        <!-- 동적으로 렌더링됨 -->
+      </div>
+    </div>
+
+    <!-- 제품 상세보기 -->
+    <div class="tab-content hidden" id="productDetailTab">
+      <div class="detail-header">
+        <button class="back-btn" id="backBtn">← 목록으로</button>
+      </div>
+      <div class="detail-content" id="detailContent">
         <!-- 동적으로 렌더링됨 -->
       </div>
     </div>

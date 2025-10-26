@@ -12,6 +12,16 @@ const analyzeResult = document.getElementById('analyzeResult') as HTMLDivElement
 const productsContainer = document.getElementById(
   'productsContainer'
 ) as HTMLDivElement;
+const categoryFilters = document.getElementById(
+  'categoryFilters'
+) as HTMLDivElement;
+const productDetailTab = document.getElementById(
+  'productDetailTab'
+) as HTMLDivElement;
+const detailContent = document.getElementById(
+  'detailContent'
+) as HTMLDivElement;
+const backBtn = document.getElementById('backBtn') as HTMLButtonElement;
 
 /**
  * 작업 상태 폴링 인터벌
@@ -19,11 +29,18 @@ const productsContainer = document.getElementById(
 let taskPollingInterval: number | null = null;
 
 /**
+ * 현재 상태
+ */
+let selectedCategory: string | null = null; // null이면 전체 보기
+let currentView: 'list' | 'detail' = 'list';
+
+/**
  * Popup 초기화
  */
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initAnalyzeTab();
+  initProductDetailTab();
   loadProductsList();
   checkAndRestoreTaskState();
 });
@@ -64,11 +81,21 @@ function switchTab(tab: 'analyze' | 'products'): void {
   if (tab === 'analyze') {
     analyzTab?.classList.remove('hidden');
     productsTab?.classList.add('hidden');
+    productDetailTab.classList.add('hidden');
+    currentView = 'list';
   } else {
     analyzTab?.classList.add('hidden');
-    productsTab?.classList.remove('hidden');
+    if (currentView === 'list') {
+      productsTab?.classList.remove('hidden');
+      productDetailTab.classList.add('hidden');
+    } else {
+      productsTab?.classList.add('hidden');
+      productDetailTab.classList.remove('hidden');
+    }
     // 제품 목록 탭으로 전환 시 목록 새로고침
-    loadProductsList();
+    if (currentView === 'list') {
+      loadProductsList();
+    }
   }
 }
 
@@ -83,6 +110,16 @@ function initAnalyzeTab(): void {
     if (e.key === 'Enter' && !analyzeBtn.disabled) {
       handleAnalyze();
     }
+  });
+}
+
+/**
+ * 제품 상세보기 탭 초기화
+ */
+function initProductDetailTab(): void {
+  backBtn.addEventListener('click', () => {
+    currentView = 'list';
+    switchTab('products');
   });
 }
 
@@ -257,10 +294,29 @@ async function loadProductsList(): Promise<void> {
 
     if (products.length === 0) {
       renderEmptyState();
+      categoryFilters.innerHTML = '';
       return;
     }
 
-    renderProductsList(products, categories);
+    // 카테고리 필터 렌더링
+    renderCategoryFilters(categories);
+
+    // 선택된 카테고리에 따라 제품 필터링
+    const filteredProducts = selectedCategory
+      ? products.filter((p) => p.category === selectedCategory)
+      : products;
+
+    if (filteredProducts.length === 0) {
+      productsContainer.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">🔍</div>
+          <div>선택한 카테고리에 제품이 없습니다.</div>
+        </div>
+      `;
+      return;
+    }
+
+    renderProductsList(filteredProducts);
   } catch (error) {
     console.error('제품 목록 로드 실패:', error);
     productsContainer.innerHTML = `
@@ -270,6 +326,38 @@ async function loadProductsList(): Promise<void> {
       </div>
     `;
   }
+}
+
+/**
+ * 카테고리 필터 렌더링
+ */
+function renderCategoryFilters(categories: string[]): void {
+  const allChip = `
+    <div class="category-chip ${selectedCategory === null ? 'active' : ''}" data-category="">
+      전체
+    </div>
+  `;
+
+  const categoryChips = categories
+    .map(
+      (category) => `
+    <div class="category-chip ${selectedCategory === category ? 'active' : ''}" data-category="${category}">
+      ${category}
+    </div>
+  `
+    )
+    .join('');
+
+  categoryFilters.innerHTML = allChip + categoryChips;
+
+  // 필터 클릭 이벤트
+  categoryFilters.querySelectorAll('.category-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const category = (chip as HTMLElement).dataset.category || null;
+      selectedCategory = category;
+      loadProductsList();
+    });
+  });
 }
 
 /**
@@ -288,47 +376,21 @@ function renderEmptyState(): void {
 }
 
 /**
- * 제품 목록 렌더링 (카테고리별 그룹핑)
+ * 제품 목록 렌더링 (단일 카테고리 또는 전체)
  */
-function renderProductsList(
-  products: StoredProduct[],
-  categories: string[]
-): void {
-  const html = categories
-    .map((category) => {
-      const categoryProducts = products.filter((p) => p.category === category);
-      return renderCategoryGroup(category, categoryProducts);
-    })
-    .join('');
-
-  productsContainer.innerHTML = html;
-
-  // 이벤트 리스너 등록
-  attachProductEventListeners();
-}
-
-/**
- * 카테고리 그룹 렌더링
- */
-function renderCategoryGroup(
-  category: string,
-  products: StoredProduct[]
-): string {
+function renderProductsList(products: StoredProduct[]): void {
   const productCards = products
     .map((product) => renderProductCard(product))
     .join('');
 
-  return `
-    <div class="category-group">
-      <div class="category-header">
-        <div class="category-name">${category}</div>
-        <div class="category-count">${products.length}개</div>
-      </div>
-      <div class="product-list">
-        ${productCards}
-      </div>
+  productsContainer.innerHTML = `
+    <div class="product-list">
+      ${productCards}
     </div>
   `;
+
+  // 이벤트 리스너 등록
+  attachProductEventListeners();
 }
 
 /**
@@ -347,10 +409,10 @@ function renderProductCard(product: StoredProduct): string {
         <div class="product-price">${product.price}</div>
         <div class="product-summary">${product.summary}</div>
         <div class="product-actions">
-          <button class="btn-small btn-secondary open-page-btn" data-url="${product.url}">
+          <button class="btn-small btn-secondary open-page-btn" data-url="${product.url}" onclick="event.stopPropagation()">
             페이지 열기
           </button>
-          <button class="btn-small btn-danger delete-product-btn" data-product-id="${product.id}">
+          <button class="btn-small btn-danger delete-product-btn" data-product-id="${product.id}" onclick="event.stopPropagation()">
             삭제
           </button>
         </div>
@@ -363,6 +425,16 @@ function renderProductCard(product: StoredProduct): string {
  * 제품 이벤트 리스너 등록
  */
 function attachProductEventListeners(): void {
+  // 제품 카드 클릭 (상세보기)
+  document.querySelectorAll('.product-card').forEach((card) => {
+    card.addEventListener('click', async () => {
+      const productId = (card as HTMLElement).dataset.productId;
+      if (productId) {
+        await showProductDetail(productId);
+      }
+    });
+  });
+
   // 페이지 열기 버튼
   document.querySelectorAll('.open-page-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -382,6 +454,139 @@ function attachProductEventListeners(): void {
       }
     });
   });
+}
+
+/**
+ * 제품 상세보기 표시
+ */
+async function showProductDetail(productId: string): Promise<void> {
+  const products = await getProducts();
+  const product = products.find((p) => p.id === productId);
+
+  if (!product) {
+    alert('제품을 찾을 수 없습니다.');
+    return;
+  }
+
+  // 상세보기 렌더링
+  renderProductDetail(product);
+
+  // 뷰 전환
+  currentView = 'detail';
+  document.getElementById('productsTab')?.classList.add('hidden');
+  productDetailTab.classList.remove('hidden');
+}
+
+/**
+ * 제품 상세보기 렌더링
+ */
+function renderProductDetail(product: StoredProduct): void {
+  const thumbnail = product.thumbnailUrl
+    ? `<img src="${product.thumbnailUrl}" class="detail-thumbnail" alt="${product.title}" />`
+    : '';
+
+  const keyFeatures = product.fullAnalysis.key_features.length
+    ? `<ul class="detail-list">
+        ${product.fullAnalysis.key_features.map((f) => `<li>${f}</li>`).join('')}
+       </ul>`
+    : '<div class="detail-value">정보 없음</div>';
+
+  const pros = product.fullAnalysis.pros.length
+    ? `<ul class="detail-list">
+        ${product.fullAnalysis.pros.map((p) => `<li>${p}</li>`).join('')}
+       </ul>`
+    : '<div class="detail-value">정보 없음</div>';
+
+  const cons = product.fullAnalysis.cons.length
+    ? `<ul class="detail-list">
+        ${product.fullAnalysis.cons.map((c) => `<li>${c}</li>`).join('')}
+       </ul>`
+    : '<div class="detail-value">정보 없음</div>';
+
+  const recommendationReasons = product.fullAnalysis.recommendation_reasons.length
+    ? `<ul class="detail-list">
+        ${product.fullAnalysis.recommendation_reasons.map((r) => `<li>${r}</li>`).join('')}
+       </ul>`
+    : '<div class="detail-value">정보 없음</div>';
+
+  const notRecommendedReasons = product.fullAnalysis.not_recommended_reasons.length
+    ? `<ul class="detail-list">
+        ${product.fullAnalysis.not_recommended_reasons.map((r) => `<li>${r}</li>`).join('')}
+       </ul>`
+    : '<div class="detail-value">정보 없음</div>';
+
+  detailContent.innerHTML = `
+    ${thumbnail}
+
+    <div class="detail-section">
+      <div class="detail-section-title">기본 정보</div>
+      <div class="detail-field">
+        <div class="detail-label">제품명</div>
+        <div class="detail-value">${product.fullAnalysis.product_name}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">가격</div>
+        <div class="detail-value" style="color: #007aff; font-weight: 600; font-size: 16px;">${product.fullAnalysis.price}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">요약</div>
+        <div class="detail-value">${product.fullAnalysis.summary}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">카테고리</div>
+        <div class="detail-value">${product.category}</div>
+      </div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">주요 특징</div>
+      ${keyFeatures}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">장점</div>
+      ${pros}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">단점</div>
+      ${cons}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">추천 대상</div>
+      <div class="detail-value">${product.fullAnalysis.recommended_for}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">추천 이유</div>
+      ${recommendationReasons}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">비추천 이유</div>
+      ${notRecommendedReasons}
+    </div>
+
+    <div class="detail-section">
+      <div class="detail-section-title">원본 페이지</div>
+      <button class="btn-small btn-secondary" onclick="chrome.tabs.create({ url: '${product.url}' })">
+        페이지 열기
+      </button>
+      <button class="btn-small btn-danger" onclick="(async () => {
+        if (confirm('이 제품을 삭제하시겠습니까?')) {
+          await chrome.storage.local.get('products').then(async (result) => {
+            const products = result.products || { products: [] };
+            products.products = products.products.filter(p => p.id !== '${product.id}');
+            await chrome.storage.local.set({ products });
+            window.location.reload();
+          });
+        }
+      })()">
+        삭제
+      </button>
+    </div>
+  `;
 }
 
 /**
