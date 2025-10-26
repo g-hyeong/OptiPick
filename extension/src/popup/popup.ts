@@ -1,15 +1,5 @@
-import type {
-  ExtractedContent,
-  ProductAnalysisResponse,
-} from '@/types/content';
-import type { StoredProduct } from '@/types/storage';
-import { analyzeProduct } from '@/utils/api';
-import {
-  saveProduct,
-  getProducts,
-  getCategories,
-  deleteProduct,
-} from '@/utils/storage';
+import type { AnalysisTask, StoredProduct } from '@/types/storage';
+import { getProducts, getCategories, deleteProduct } from '@/utils/storage';
 
 /**
  * DOM 요소
@@ -24,12 +14,18 @@ const productsContainer = document.getElementById(
 ) as HTMLDivElement;
 
 /**
+ * 작업 상태 폴링 인터벌
+ */
+let taskPollingInterval: number | null = null;
+
+/**
  * Popup 초기화
  */
 document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initAnalyzeTab();
   loadProductsList();
+  checkAndRestoreTaskState();
 });
 
 /**
@@ -84,7 +80,7 @@ function initAnalyzeTab(): void {
 
   // Enter 키로도 분석 시작
   categoryInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !analyzeBtn.disabled) {
       handleAnalyze();
     }
   });
@@ -103,124 +99,141 @@ async function handleAnalyze(): Promise<void> {
     return;
   }
 
-  analyzeBtn.disabled = true;
-  analyzeBtn.textContent = '분석 중...';
-  showAnalyzeResult('페이지 분석 중입니다...', 'info');
-
-  try {
-    // 1. 현재 페이지 콘텐츠 추출
-    const content = await extractContent();
-
-    // 2. 제품 분석
-    const analysisResult = await analyzeProduct(content);
-
-    // 3. 저장
-    await saveAnalysisResult(category, content, analysisResult);
-
-    // 4. 성공 메시지 표시
-    showAnalyzeResult(
-      `분석 완료! "${analysisResult.product_analysis.product_name}" 제품이 저장되었습니다.`,
-      'success'
-    );
-
-    // 5. 입력 초기화
-    categoryInput.value = '';
-
-    // 6. 제품 목록 탭으로 전환 (1초 후)
-    setTimeout(() => {
-      switchTab('products');
-    }, 1000);
-  } catch (error) {
-    console.error('분석 실패:', error);
-    showAnalyzeResult(
-      `분석 실패: ${error instanceof Error ? error.message : '알 수 없는 오류'}`,
-      'error'
-    );
-  } finally {
-    analyzeBtn.disabled = false;
-    analyzeBtn.textContent = '현재 페이지 상품 분석';
-  }
-}
-
-/**
- * Content Script 준비 확인
- */
-async function ensureContentScriptReady(tabId: number): Promise<void> {
-  try {
-    // PING 메시지로 content script 확인
-    await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-  } catch (error) {
-    // Content script가 없으면 동적으로 주입
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js'],
-    });
-
-    // Content script 로드 대기 (최대 2초)
-    let retries = 10;
-    while (retries > 0) {
-      try {
-        await chrome.tabs.sendMessage(tabId, { type: 'PING' });
-        return; // 성공
-      } catch {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        retries--;
-      }
-    }
-
-    throw new Error(
-      '페이지 준비에 실패했습니다. 페이지를 새로고침한 후 다시 시도해주세요.'
-    );
-  }
-}
-
-/**
- * 현재 탭에서 콘텐츠 추출
- */
-async function extractContent(): Promise<ExtractedContent> {
+  // 현재 활성 탭 가져오기
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!tab.id) {
-    throw new Error('활성 탭을 찾을 수 없습니다.');
+    showAnalyzeResult('활성 탭을 찾을 수 없습니다.', 'error');
+    return;
   }
 
-  // Content script 준비 확인
-  await ensureContentScriptReady(tab.id);
-
-  const response = await chrome.tabs.sendMessage(tab.id, {
-    type: 'EXTRACT_CONTENT',
-    options: {
-      minTextLength: 10,
-      minImageSize: { width: 100, height: 100 },
+  // Background에게 분석 작업 시작 요청
+  chrome.runtime.sendMessage(
+    {
+      type: 'START_ANALYSIS',
+      category,
+      tabId: tab.id,
     },
-  });
-
-  if (!response.success) {
-    throw new Error(response.error || '콘텐츠 추출에 실패했습니다.');
-  }
-
-  return response.data;
+    (response) => {
+      if (response && response.success) {
+        // 작업 시작 성공 - 상태 폴링 시작
+        startTaskPolling();
+      } else {
+        showAnalyzeResult(
+          `작업 시작 실패: ${response?.error || '알 수 없는 오류'}`,
+          'error'
+        );
+      }
+    }
+  );
 }
 
 /**
- * 분석 결과 저장
+ * 작업 상태 확인 및 복원
  */
-async function saveAnalysisResult(
-  category: string,
-  content: ExtractedContent,
-  analysisResult: ProductAnalysisResponse
-): Promise<void> {
-  const product: Omit<StoredProduct, 'id' | 'addedAt'> = {
-    category,
-    url: content.url,
-    title: content.title,
-    price: analysisResult.product_analysis.price,
-    summary: analysisResult.product_analysis.summary,
-    thumbnailUrl: analysisResult.valid_images[0]?.src,
-    fullAnalysis: analysisResult.product_analysis,
-  };
+async function checkAndRestoreTaskState(): Promise<void> {
+  chrome.runtime.sendMessage({ type: 'GET_TASK_STATE' }, (response) => {
+    if (response && response.success && response.task) {
+      const task: AnalysisTask = response.task;
 
-  await saveProduct(product);
+      // 진행 중이거나 최근 완료된 작업이 있으면 표시
+      if (
+        task.status !== 'idle' &&
+        (!task.completedAt || Date.now() - task.completedAt < 5000)
+      ) {
+        updateUIFromTask(task);
+
+        // 진행 중인 작업이면 폴링 시작
+        if (!task.completedAt) {
+          startTaskPolling();
+        }
+      }
+    }
+  });
+}
+
+/**
+ * 작업 상태 폴링 시작
+ */
+function startTaskPolling(): void {
+  // 기존 폴링 중지
+  if (taskPollingInterval !== null) {
+    clearInterval(taskPollingInterval);
+  }
+
+  // 500ms마다 작업 상태 확인
+  taskPollingInterval = window.setInterval(() => {
+    chrome.runtime.sendMessage({ type: 'GET_TASK_STATE' }, (response) => {
+      if (response && response.success) {
+        const task: AnalysisTask | null = response.task;
+
+        if (task) {
+          updateUIFromTask(task);
+
+          // 작업 완료 시 폴링 중지
+          if (task.status === 'completed' || task.status === 'failed') {
+            stopTaskPolling();
+
+            // 완료 시 제품 목록 새로고침
+            if (task.status === 'completed') {
+              setTimeout(() => {
+                switchTab('products');
+              }, 2000);
+            }
+          }
+        } else {
+          // 작업 없으면 폴링 중지
+          stopTaskPolling();
+        }
+      }
+    });
+  }, 500);
+}
+
+/**
+ * 작업 상태 폴링 중지
+ */
+function stopTaskPolling(): void {
+  if (taskPollingInterval !== null) {
+    clearInterval(taskPollingInterval);
+    taskPollingInterval = null;
+  }
+}
+
+/**
+ * 작업 상태에 따라 UI 업데이트
+ */
+function updateUIFromTask(task: AnalysisTask): void {
+  // 카테고리 입력 필드에 복원
+  if (categoryInput.value === '') {
+    categoryInput.value = task.category;
+  }
+
+  // 버튼 상태 업데이트
+  const isInProgress =
+    task.status !== 'completed' && task.status !== 'failed';
+  analyzeBtn.disabled = isInProgress;
+
+  if (isInProgress) {
+    analyzeBtn.textContent = '분석 중...';
+  } else {
+    analyzeBtn.textContent = '현재 페이지 상품 분석';
+  }
+
+  // 메시지 표시
+  let messageType: 'info' | 'success' | 'error';
+  if (task.status === 'completed') {
+    messageType = 'success';
+  } else if (task.status === 'failed') {
+    messageType = 'error';
+  } else {
+    messageType = 'info';
+  }
+
+  showAnalyzeResult(
+    task.error ? `${task.message}: ${task.error}` : task.message,
+    messageType
+  );
 }
 
 /**
@@ -301,7 +314,9 @@ function renderCategoryGroup(
   category: string,
   products: StoredProduct[]
 ): string {
-  const productCards = products.map((product) => renderProductCard(product)).join('');
+  const productCards = products
+    .map((product) => renderProductCard(product))
+    .join('');
 
   return `
     <div class="category-group">
@@ -387,3 +402,10 @@ async function handleDeleteProduct(productId: string): Promise<void> {
     alert('제품 삭제에 실패했습니다.');
   }
 }
+
+/**
+ * Popup 닫힐 때 폴링 정리
+ */
+window.addEventListener('beforeunload', () => {
+  stopTaskPolling();
+});

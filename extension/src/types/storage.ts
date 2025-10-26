@@ -30,3 +30,45 @@ export interface StoredProduct {
 export interface ProductStorage {
   products: StoredProduct[];
 }
+
+/**
+ * 분석 작업 상태
+ */
+export type AnalysisTaskStatus =
+  | 'idle'
+  | 'extracting'
+  | 'analyzing'
+  | 'saving'
+  | 'completed'
+  | 'failed';
+
+/**
+ * 진행 중인 분석 작업
+ */
+export interface AnalysisTask {
+  /** 작업 ID */
+  taskId: string;
+  /** 카테고리 */
+  category: string;
+  /** 페이지 URL */
+  url: string;
+  /** 페이지 제목 */
+  title: string;
+  /** 작업 상태 */
+  status: AnalysisTaskStatus;
+  /** 진행 메시지 */
+  message: string;
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+  /** 시작 시간 */
+  startedAt: number;
+  /** 완료 시간 */
+  completedAt?: number;
+}
+
+/**
+ * 작업 상태 Storage
+ */
+export interface TaskStorage {
+  currentTask: AnalysisTask | null;
+}
