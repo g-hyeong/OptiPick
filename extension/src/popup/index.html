@@ -12,23 +12,80 @@
       }
 
       body {
-        width: 400px;
-        min-height: 300px;
-        padding: 20px;
+        width: 450px;
+        min-height: 400px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background: #f5f5f5;
       }
 
-      h1 {
-        font-size: 20px;
-        margin-bottom: 20px;
-        color: #333;
+      .header {
+        background: #007aff;
+        color: white;
+        padding: 16px 20px;
+        font-size: 18px;
+        font-weight: 600;
       }
 
-      .controls {
+      /* 탭 스타일 */
+      .tabs {
+        display: flex;
+        background: white;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .tab-btn {
+        flex: 1;
+        padding: 12px 16px;
+        border: none;
+        background: white;
+        color: #666;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .tab-btn:hover {
+        background: #f8f8f8;
+      }
+
+      .tab-btn.active {
+        color: #007aff;
+        border-bottom-color: #007aff;
+      }
+
+      /* 탭 컨텐츠 */
+      .tab-content {
+        padding: 20px;
+      }
+
+      .tab-content.hidden {
+        display: none;
+      }
+
+      /* 분석 탭 */
+      .analyze-section {
         display: flex;
         flex-direction: column;
         gap: 12px;
+      }
+
+      input[type='text'] {
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      input[type='text']:focus {
+        border-color: #007aff;
+      }
+
+      input[type='text']::placeholder {
+        color: #999;
       }
 
       button {
@@ -52,121 +109,215 @@
         cursor: not-allowed;
       }
 
-      .result {
-        margin-top: 20px;
-        padding: 16px;
+      .analyze-result {
+        margin-top: 12px;
+        padding: 12px;
         background: white;
         border-radius: 6px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        max-height: 400px;
+        font-size: 13px;
+        color: #333;
+      }
+
+      .analyze-result.success {
+        background: #e8f5e9;
+        color: #2e7d32;
+      }
+
+      .analyze-result.error {
+        background: #ffebee;
+        color: #d32f2f;
+      }
+
+      /* 제품 목록 탭 */
+      .products-container {
+        max-height: 500px;
         overflow-y: auto;
       }
 
-      .result h3 {
-        font-size: 14px;
-        margin-bottom: 8px;
-        color: #666;
+      .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #999;
       }
 
-      .result pre {
-        font-size: 12px;
-        line-height: 1.5;
-        color: #333;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
-      .error {
-        color: #d32f2f;
-        background: #ffebee;
-      }
-
-      .success {
-        color: #2e7d32;
-        background: #e8f5e9;
-      }
-
-      .stats {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
+      .empty-state-icon {
+        font-size: 48px;
         margin-bottom: 12px;
       }
 
-      .stat-item {
-        padding: 8px;
-        background: #f0f0f0;
-        border-radius: 4px;
-        text-align: center;
+      .category-group {
+        margin-bottom: 24px;
       }
 
-      .stat-label {
-        font-size: 11px;
-        color: #666;
-        margin-bottom: 4px;
+      .category-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #007aff;
       }
 
-      .stat-value {
-        font-size: 18px;
+      .category-name {
+        font-size: 16px;
         font-weight: 600;
+        color: #333;
+      }
+
+      .category-count {
+        font-size: 12px;
+        color: #666;
+        background: #e3f2fd;
+        padding: 2px 8px;
+        border-radius: 12px;
+      }
+
+      .product-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .product-card {
+        display: flex;
+        gap: 12px;
+        background: white;
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: box-shadow 0.2s;
+      }
+
+      .product-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+      }
+
+      .product-thumbnail {
+        flex-shrink: 0;
+        width: 100px;
+        height: 100px;
+        border-radius: 6px;
+        object-fit: cover;
+        background: #f0f0f0;
+      }
+
+      .product-thumbnail.placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ccc;
+        font-size: 12px;
+      }
+
+      .product-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+
+      .product-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+      }
+
+      .product-price {
+        font-size: 15px;
+        font-weight: 700;
         color: #007aff;
       }
 
-      .images-gallery {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        gap: 12px;
-        margin-top: 12px;
-      }
-
-      .image-item {
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        overflow: hidden;
-        background: white;
-      }
-
-      .image-item img {
-        width: 100%;
-        height: 100px;
-        object-fit: cover;
-        display: block;
-      }
-
-      .image-info {
-        padding: 8px;
-        font-size: 11px;
+      .product-summary {
+        font-size: 12px;
         color: #666;
-        background: #f5f5f5;
-      }
-
-      .image-info > div {
-        margin-bottom: 4px;
-      }
-
-      .image-info > div:last-child {
-        margin-bottom: 0;
-      }
-
-      .image-alt {
-        color: #999;
-        font-style: italic;
-        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.4;
+      }
+
+      .product-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: auto;
+      }
+
+      .btn-small {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+
+      .btn-secondary {
+        background: #6c757d;
+      }
+
+      .btn-secondary:hover {
+        background: #5a6268;
+      }
+
+      .btn-danger {
+        background: #dc3545;
+      }
+
+      .btn-danger:hover {
+        background: #c82333;
+      }
+
+      /* 스크롤바 스타일 */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
       }
     </style>
   </head>
   <body>
-    <h1>SmartCompare</h1>
+    <div class="header">SmartCompare</div>
 
-    <div class="controls">
-      <button id="extractBtn">Extract Content</button>
-      <button id="analyzeBtn">현재 페이지 상품 분석</button>
-      <button id="clearBtn">Clear Results</button>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="analyze">분석</button>
+      <button class="tab-btn" data-tab="products">내 제품 목록</button>
     </div>
 
-    <div id="result"></div>
+    <!-- 분석 탭 -->
+    <div class="tab-content" id="analyzeTab">
+      <div class="analyze-section">
+        <input
+          type="text"
+          id="categoryInput"
+          placeholder="카테고리 입력 (예: 노트북, 스마트폰, 헤드폰)"
+        />
+        <button id="analyzeBtn">현재 페이지 상품 분석</button>
+        <div id="analyzeResult"></div>
+      </div>
+    </div>
+
+    <!-- 제품 목록 탭 -->
+    <div class="tab-content hidden" id="productsTab">
+      <div class="products-container" id="productsContainer">
+        <!-- 동적으로 렌더링됨 -->
+      </div>
+    </div>
 
     <script src="./popup.ts" type="module"></script>
   </body>
