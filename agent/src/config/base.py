@@ -6,9 +6,14 @@ from pydantic_settings import BaseSettings as PydanticBaseSettings, SettingsConf
 class BaseSettings(PydanticBaseSettings):
     """프로젝트 전체 공통 설정"""
 
-    # OCR API 설정
-    ocr_api_key: str
+    # OCR API 설정 (OcrSpace)
+    ocr_api_key: str = ""
     ocr_api_endpoint: str = "https://api.ocr.space/parse/image"
+
+    # Clova OCR API 설정
+    clova_secret_key: str = ""
+    clova_invoke_url: str = ""
+    clova_lang: str = "ko"
 
     # Google AI API 설정
     google_api_key: str

@@ -1,10 +1,12 @@
-import type { ExtractedContent } from '@/types/content';
+import type { ExtractedContent, ProductAnalysisResponse } from '@/types/content';
+import { analyzeProduct } from '@/utils/api';
 
 /**
  * Popup UI 초기화
  */
 document.addEventListener('DOMContentLoaded', () => {
   const extractBtn = document.getElementById('extractBtn') as HTMLButtonElement;
+  const analyzeBtn = document.getElementById('analyzeBtn') as HTMLButtonElement;
   const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
   const resultDiv = document.getElementById('result') as HTMLDivElement;
 
@@ -21,6 +23,23 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       extractBtn.disabled = false;
       extractBtn.textContent = 'Extract Content';
+    }
+  });
+
+  // 상품 분석 버튼 클릭
+  analyzeBtn.addEventListener('click', async () => {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = '분석 중...';
+
+    try {
+      const content = await extractContent();
+      const analysisResult = await analyzeProduct(content);
+      displayAnalysisResult(resultDiv, analysisResult);
+    } catch (error) {
+      displayError(resultDiv, error);
+    } finally {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = '현재 페이지 상품 분석';
     }
   });
 
@@ -122,6 +141,24 @@ function displayResult(
 }
 
 /**
+ * 상품 분석 결과 표시
+ */
+function displayAnalysisResult(
+  container: HTMLDivElement,
+  result: ProductAnalysisResponse
+): void {
+  container.innerHTML = `
+    <div class="result success">
+      <h3>상품 분석 결과</h3>
+      <pre>${JSON.stringify(result, null, 2)}</pre>
+    </div>
+  `;
+
+  // 콘솔에 전체 데이터 출력
+  console.log('Product Analysis Result:', result);
+}
+
+/**
  * 에러 표시
  */
 function displayError(container: HTMLDivElement, error: unknown): void {
@@ -134,5 +171,5 @@ function displayError(container: HTMLDivElement, error: unknown): void {
     </div>
   `;
 
-  console.error('Extract error:', error);
+  console.error('Error:', error);
 }

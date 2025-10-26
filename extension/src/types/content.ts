@@ -50,3 +50,47 @@ export interface ParserOptions {
   /** 제외할 CSS 선택자 */
   excludeSelectors?: string[];
 }
+
+/**
+ * 상품 분석 API 요청
+ */
+export interface ProductAnalysisRequest {
+  url: string;
+  title: string;
+  timestamp: number;
+  texts: ExtractedText[];
+  images: ExtractedImage[];
+}
+
+/**
+ * OCR 결과를 포함한 이미지
+ */
+export interface ValidatedImage extends ExtractedImage {
+  ocr_result: string;
+}
+
+/**
+ * 상품 분석 결과
+ */
+export interface ProductAnalysis {
+  product_name: string;
+  summary: string;
+  price: string;
+  key_features: string[];
+  pros: string[];
+  cons: string[];
+  recommended_for: string;
+  recommendation_reasons: string[];
+  not_recommended_reasons: string[];
+}
+
+/**
+ * 상품 분석 API 응답
+ */
+export interface ProductAnalysisResponse {
+  url: string;
+  title: string;
+  valid_images: ValidatedImage[];
+  product_analysis: ProductAnalysis;
+  timestamp: number;
+}

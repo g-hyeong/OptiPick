@@ -6,7 +6,10 @@ from src.config.base import BaseSettings
 class SummarizePageSettings(BaseSettings):
     """SummarizePage 그래프 전용 설정 (BaseSettings 상속)"""
 
-    # OCR 엔진 설정
+    # OCR Provider 설정
+    ocr_provider: str = "clova"  # OCR 제공자 선택: "clova" 또는 "ocrspace"
+
+    # OCR 엔진 설정 (OcrSpace 전용)
     ocr_engine: int = 2  # Engine 2: 자동 언어 감지, 복잡한 배경 인식 우수
     ocr_language: str = "auto"  # 자동 언어 감지 (한글/영어 혼재 대응)
     ocr_detect_orientation: bool = True  # 이미지 회전 자동 감지

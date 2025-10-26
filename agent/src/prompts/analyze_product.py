@@ -34,7 +34,12 @@ If specific information is not provided in the input:
 ## 3. Extraction Priorities
 - **Product name:** Look for prominent product titles, H1/H2 headings
 - **Price:** Extract exact price with currency symbol (keep original format)
-- **Key features:** Technical specifications, product attributes, highlights
+- **Key features:** Technical specifications, product attributes, highlights, materials, ingredients, composition, content ratios
+  - Include materials and composition (재질, 소재, 성분)
+  - Extract ingredient lists and their percentages/ratios when available
+  - Capture content amounts, concentrations, and proportions
+  - Include nutritional information, chemical composition, or material specifications
+  - When specific percentages or ratios are disclosed, include them as key features
 - **Pros/Cons:** Customer reviews, expert opinions, comparison points
 - **Recommendations:** Target audience mentions, use case descriptions
 
@@ -43,12 +48,20 @@ If specific information is not provided in the input:
 - Use clear, professional language
 - Maintain consistency in terminology
 - Focus on actionable insights
+- Include specific numerical values and percentages when available
 
 ## 5. Examples of "unknown" Cases
 - Product name not clearly stated → "unknown"
 - No price information on page → "unknown"
 - Cannot determine target audience → "unknown"
 - No clear pros/cons mentioned → empty array
+
+## 6. Material and Composition Analysis
+- Extract all material information (fabric composition, ingredient lists, etc.)
+- Include percentage breakdowns when provided (e.g., "면 80%, 폴리에스터 20%")
+- Capture concentration levels, content amounts, and ratios
+- Include nutritional facts, chemical compositions, or technical specifications
+- Note any certifications or quality standards related to materials/ingredients
 
 # IMPORTANT:
 It's better to return "unknown" or empty arrays than to guess or fabricate information.
