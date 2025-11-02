@@ -11,6 +11,10 @@ from .nodes import (
     generate_report_node,
 )
 
+# 모듈 레벨 싱글톤 Checkpointer
+# 모든 그래프 인스턴스가 동일한 메모리를 공유하여 thread_id로 상태 추적 가능
+_CHECKPOINTER = MemorySaver()
+
 
 def create_graph() -> StateGraph:
     """
@@ -47,9 +51,9 @@ def create_graph() -> StateGraph:
     workflow.add_edge("generate_report", END)
 
     # Checkpointer와 함께 컴파일 (HITL 지원)
-    memory = MemorySaver()
+    # 모듈 레벨 싱글톤 사용으로 모든 API 호출에서 동일한 메모리 공유
     graph = workflow.compile(
-        checkpointer=memory,
+        checkpointer=_CHECKPOINTER,
         interrupt_before=["collect_user_criteria", "collect_user_priorities"],
     )
 

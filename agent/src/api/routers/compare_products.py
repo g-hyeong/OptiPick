@@ -176,12 +176,44 @@ async def continue_compare_products(
                 detail="user_input must be list (criteria) or dict (priorities)",
             )
 
-        # 그래프 재개
+        # 재개 전 상태 확인
+        logger.info(
+            "Before resume",
+            extra={
+                "thread_id": thread_id,
+                "next_nodes": current_state.next,
+                "update_state_keys": list(update_state.keys()),
+            },
+        )
+
+        # State 업데이트 (LangGraph 0.6.8 올바른 방식)
+        await graph.aupdate_state(config, update_state)
+
+        # 업데이트 후 상태 확인
+        updated_state = await graph.aget_state(config)
+        logger.info(
+            "After state update",
+            extra={
+                "thread_id": thread_id,
+                "next_nodes": updated_state.next,
+                "state_keys": list(updated_state.values.keys()) if updated_state.values else [],
+            },
+        )
+
+        # 그래프 재개 (None을 전달하여 checkpointed state에서 재개)
         logger.info(f"Resuming graph execution (thread_id: {thread_id})")
-        result = await graph.ainvoke(update_state, config)
+        result = await graph.ainvoke(None, config)
 
         # 재개 후 상태 확인
         new_state = await graph.aget_state(config)
+        logger.info(
+            "After graph execution",
+            extra={
+                "thread_id": thread_id,
+                "next_nodes": new_state.next,
+                "result_keys": list(result.keys()),
+            },
+        )
 
         # Case 1 응답: 다음 interrupt 대기 (waiting_for_priorities)
         if new_state.next and "collect_user_priorities" in new_state.next:
