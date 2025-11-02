@@ -423,6 +423,190 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #a8a8a8;
       }
+
+      /* 비교 탭 스타일 */
+      .compare-section {
+        margin-bottom: 16px;
+      }
+
+      .label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .select-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+        cursor: pointer;
+      }
+
+      .products-checkbox-list {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 8px;
+        background: white;
+      }
+
+      .product-checkbox-item {
+        padding: 8px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .product-checkbox-item:last-child {
+        border-bottom: none;
+      }
+
+      .product-checkbox-item input[type='checkbox'] {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+
+      .product-checkbox-label {
+        flex: 1;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .selected-count {
+        font-size: 12px;
+        color: #666;
+        margin-top: 6px;
+      }
+
+      .textarea-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: #999;
+        margin-top: 4px;
+      }
+
+      .btn-primary {
+        width: 100%;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 6px;
+        background: #007aff;
+        color: white;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: #0056b3;
+      }
+
+      .btn-primary:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .btn-secondary {
+        padding: 12px 20px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        background: white;
+        color: #333;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .btn-secondary:hover {
+        background: #f5f5f5;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+      }
+
+      .button-group button {
+        flex: 1;
+      }
+
+      .result-message {
+        margin-top: 12px;
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+
+      .result-message.loading {
+        background: #e3f2fd;
+        color: #1976d2;
+      }
+
+      .result-message.error {
+        background: #ffebee;
+        color: #c62828;
+      }
+
+      .priority-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .priority-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+      }
+
+      .priority-number {
+        width: 50px;
+        padding: 6px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        text-align: center;
+        font-size: 14px;
+      }
+
+      .criterion-name {
+        flex: 1;
+        font-size: 14px;
+      }
+
+      .move-btn {
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      .move-btn:hover {
+        background: #f5f5f5;
+      }
     </style>
   </head>
   <body>
@@ -431,6 +615,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="analyze">분석</button>
       <button class="tab-btn" data-tab="products">내 제품 목록</button>
+      <button class="tab-btn" data-tab="compare">비교</button>
     </div>
 
     <!-- 분석 탭 -->
@@ -466,6 +651,58 @@
       </div>
       <div class="detail-content" id="detailContent">
         <!-- 동적으로 렌더링됨 -->
+      </div>
+    </div>
+
+    <!-- 비교 탭 -->
+    <div class="tab-content hidden" id="compareTab">
+      <!-- Step 1: 제품 및 기준 선택 -->
+      <div id="compareStep1">
+        <div class="compare-section">
+          <label class="label">카테고리</label>
+          <select id="compareCategorySelect" class="select-input">
+            <option value="">카테고리 선택</option>
+          </select>
+        </div>
+
+        <div class="compare-section">
+          <label class="label">비교할 제품 선택 (2~10개)</label>
+          <div id="compareProductsList" class="products-checkbox-list">
+            <!-- 동적 렌더링 -->
+          </div>
+          <div class="selected-count" id="selectedCount">0개 선택됨</div>
+        </div>
+
+        <div class="compare-section">
+          <label class="label">중요하게 보는 기준</label>
+          <textarea
+            id="compareCriteria"
+            class="textarea-input"
+            placeholder="예: 성능, 가격, 배터리, 디자인"
+            rows="3"
+          ></textarea>
+          <div class="hint">쉼표(,)로 구분해서 입력해주세요</div>
+        </div>
+
+        <button id="startCompareBtn" class="btn-primary" disabled>비교 시작</button>
+        <div id="compareStep1Result" class="result-message"></div>
+      </div>
+
+      <!-- Step 2: 우선순위 설정 -->
+      <div id="compareStep2" class="hidden">
+        <div class="compare-section">
+          <label class="label">비교 기준 우선순위 설정</label>
+          <div class="hint">숫자를 입력해서 우선순위를 정하세요 (1위가 가장 중요)</div>
+          <div id="criteriaPriorityList" class="priority-list">
+            <!-- 동적 렌더링 -->
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button id="backToStep1Btn" class="btn-secondary">이전</button>
+          <button id="finalCompareBtn" class="btn-primary">최종 분석</button>
+        </div>
+        <div id="compareStep2Result" class="result-message"></div>
       </div>
     </div>
 

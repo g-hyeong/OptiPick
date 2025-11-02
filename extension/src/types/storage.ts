@@ -72,3 +72,53 @@ export interface AnalysisTask {
 export interface TaskStorage {
   currentTask: AnalysisTask | null;
 }
+
+// ========== 비교 작업 관련 타입 ==========
+
+/**
+ * 비교 작업 상태
+ */
+export type ComparisonTaskStatus =
+  | 'idle'
+  | 'step1' // Agent에 사용자 기준 전송 대기
+  | 'step2' // Agent가 추출한 기준으로 우선순위 입력 대기
+  | 'analyzing' // 최종 분석 중
+  | 'completed'
+  | 'failed';
+
+/**
+ * 비교 작업
+ */
+export interface ComparisonTask {
+  /** 작업 ID */
+  taskId: string;
+  /** 카테고리 */
+  category: string;
+  /** 선택된 제품 ID 목록 */
+  selectedProductIds: string[];
+  /** 사용자가 입력한 중요 기준 */
+  userCriteria: string[];
+  /** 작업 상태 */
+  status: ComparisonTaskStatus;
+  /** 진행 메시지 */
+  message: string;
+  /** Agent API thread ID */
+  threadId?: string;
+  /** Agent가 추출한 전체 비교 기준 */
+  extractedCriteria?: string[];
+  /** 최종 비교 리포트 */
+  report?: import('./content').ComparisonReportData;
+  /** 에러 메시지 (실패 시) */
+  error?: string;
+  /** 시작 시간 */
+  startedAt: number;
+  /** 완료 시간 */
+  completedAt?: number;
+}
+
+/**
+ * 비교 작업 상태 Storage
+ */
+export interface ComparisonTaskStorage {
+  currentComparisonTask: ComparisonTask | null;
+}

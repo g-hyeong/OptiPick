@@ -1,4 +1,4 @@
-import type { AnalysisTask, StoredProduct } from '@/types/storage';
+import type { AnalysisTask, StoredProduct, ComparisonTask } from '@/types/storage';
 import { getProducts, getCategories, deleteProduct } from '@/utils/storage';
 
 /**
@@ -23,10 +23,25 @@ const detailContent = document.getElementById(
 ) as HTMLDivElement;
 const backBtn = document.getElementById('backBtn') as HTMLButtonElement;
 
+// 비교 탭 DOM 요소
+const compareCategorySelect = document.getElementById('compareCategorySelect') as HTMLSelectElement;
+const compareProductsList = document.getElementById('compareProductsList') as HTMLDivElement;
+const selectedCount = document.getElementById('selectedCount') as HTMLDivElement;
+const compareCriteria = document.getElementById('compareCriteria') as HTMLTextAreaElement;
+const startCompareBtn = document.getElementById('startCompareBtn') as HTMLButtonElement;
+const compareStep1Result = document.getElementById('compareStep1Result') as HTMLDivElement;
+const compareStep1 = document.getElementById('compareStep1') as HTMLDivElement;
+const compareStep2 = document.getElementById('compareStep2') as HTMLDivElement;
+const criteriaPriorityList = document.getElementById('criteriaPriorityList') as HTMLDivElement;
+const backToStep1Btn = document.getElementById('backToStep1Btn') as HTMLButtonElement;
+const finalCompareBtn = document.getElementById('finalCompareBtn') as HTMLButtonElement;
+const compareStep2Result = document.getElementById('compareStep2Result') as HTMLDivElement;
+
 /**
  * 작업 상태 폴링 인터벌
  */
 let taskPollingInterval: number | null = null;
+let comparisonTaskPollingInterval: number | null = null;
 
 /**
  * 현재 상태
@@ -41,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initAnalyzeTab();
   initProductDetailTab();
+  initCompareTab();
   loadProductsList();
   checkAndRestoreTaskState();
 });
@@ -55,7 +71,8 @@ function initTabs(): void {
     btn.addEventListener('click', () => {
       const tab = (btn as HTMLButtonElement).dataset.tab as
         | 'analyze'
-        | 'products';
+        | 'products'
+        | 'compare';
       switchTab(tab);
     });
   });
@@ -64,7 +81,7 @@ function initTabs(): void {
 /**
  * 탭 전환
  */
-function switchTab(tab: 'analyze' | 'products'): void {
+function switchTab(tab: 'analyze' | 'products' | 'compare'): void {
   // 탭 버튼 활성화 상태 변경
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     if ((btn as HTMLButtonElement).dataset.tab === tab) {
@@ -77,14 +94,24 @@ function switchTab(tab: 'analyze' | 'products'): void {
   // 탭 컨텐츠 표시/숨김
   const analyzTab = document.getElementById('analyzeTab');
   const productsTab = document.getElementById('productsTab');
+  const compareTab = document.getElementById('compareTab');
 
   if (tab === 'analyze') {
     analyzTab?.classList.remove('hidden');
     productsTab?.classList.add('hidden');
+    compareTab?.classList.add('hidden');
+    productDetailTab.classList.add('hidden');
+    currentView = 'list';
+  } else if (tab === 'compare') {
+    analyzTab?.classList.add('hidden');
+    productsTab?.classList.add('hidden');
+    compareTab?.classList.remove('hidden');
     productDetailTab.classList.add('hidden');
     currentView = 'list';
   } else {
+    // products 탭
     analyzTab?.classList.add('hidden');
+    compareTab?.classList.add('hidden');
     if (currentView === 'list') {
       productsTab?.classList.remove('hidden');
       productDetailTab.classList.add('hidden');
@@ -613,4 +640,265 @@ async function handleDeleteProduct(productId: string): Promise<void> {
  */
 window.addEventListener('beforeunload', () => {
   stopTaskPolling();
+  stopComparisonTaskPolling();
 });
+
+// ========== 비교 탭 함수 ==========
+
+let selectedProductIds: string[] = [];
+
+/**
+ * 비교 탭 초기화
+ */
+function initCompareTab(): void {
+  // 카테고리 선택 시 제품 목록 업데이트
+  compareCategorySelect.addEventListener('change', loadCompareProducts);
+
+  // 비교 시작 버튼
+  startCompareBtn.addEventListener('click', handleStartComparison);
+
+  // Step 2 버튼들
+  backToStep1Btn.addEventListener('click', () => {
+    compareStep2.classList.add('hidden');
+    compareStep1.classList.remove('hidden');
+  });
+
+  finalCompareBtn.addEventListener('click', handleFinalComparison);
+
+  // 카테고리 로드
+  loadCompareCategories();
+}
+
+/**
+ * 비교용 카테고리 로드
+ */
+async function loadCompareCategories(): Promise<void> {
+  const categories = await getCategories();
+
+  compareCategorySelect.innerHTML = '<option value="">카테고리 선택</option>';
+  categories.forEach(category => {
+    const option = document.createElement('option');
+    option.value = category;
+    option.textContent = category;
+    compareCategorySelect.appendChild(option);
+  });
+}
+
+/**
+ * 비교할 제품 목록 로드
+ */
+async function loadCompareProducts(): Promise<void> {
+  const category = compareCategorySelect.value;
+
+  if (!category) {
+    compareProductsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">카테고리를 선택해주세요</div>';
+    updateSelectedCount();
+    return;
+  }
+
+  const products = await getProducts();
+  const filteredProducts = products.filter(p => p.category === category);
+
+  if (filteredProducts.length === 0) {
+    compareProductsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">이 카테고리에 제품이 없습니다</div>';
+    updateSelectedCount();
+    return;
+  }
+
+  compareProductsList.innerHTML = filteredProducts.map(product => `
+    <div class="product-checkbox-item">
+      <input type="checkbox" id="product-${product.id}" value="${product.id}" ${selectedProductIds.includes(product.id) ? 'checked' : ''} />
+      <label for="product-${product.id}" class="product-checkbox-label">
+        ${product.title} (${product.price})
+      </label>
+    </div>
+  `).join('');
+
+  // 체크박스 이벤트 리스너
+  compareProductsList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const target = e.target as HTMLInputElement;
+      const productId = target.value;
+
+      if (target.checked) {
+        if (!selectedProductIds.includes(productId)) {
+          selectedProductIds.push(productId);
+        }
+      } else {
+        selectedProductIds = selectedProductIds.filter(id => id !== productId);
+      }
+
+      updateSelectedCount();
+    });
+  });
+
+  updateSelectedCount();
+}
+
+/**
+ * 선택된 제품 수 업데이트
+ */
+function updateSelectedCount(): void {
+  const count = selectedProductIds.length;
+  selectedCount.textContent = `${count}개 선택됨`;
+
+  // 버튼 활성화 조건: 2~10개
+  const isValid = count >= 2 && count <= 10 && compareCriteria.value.trim().length > 0;
+  startCompareBtn.disabled = !isValid;
+}
+
+// 기준 입력 시에도 버튼 활성화 체크
+compareCriteria.addEventListener('input', updateSelectedCount);
+
+/**
+ * 비교 시작
+ */
+async function handleStartComparison(): Promise<void> {
+  const category = compareCategorySelect.value;
+  const criteriaText = compareCriteria.value.trim();
+
+  if (!category || selectedProductIds.length < 2 || selectedProductIds.length > 10 || !criteriaText) {
+    return;
+  }
+
+  try {
+    startCompareBtn.disabled = true;
+    compareStep1Result.className = 'result-message loading';
+    compareStep1Result.textContent = '비교 분석을 시작하고 있습니다...';
+
+    // Background에 메시지 전송
+    await chrome.runtime.sendMessage({
+      type: 'START_COMPARISON',
+      category,
+      productIds: selectedProductIds
+    });
+
+    // 작업 상태 폴링 시작
+    startComparisonTaskPolling();
+
+  } catch (error) {
+    console.error('비교 시작 실패:', error);
+    compareStep1Result.className = 'result-message error';
+    compareStep1Result.textContent = error instanceof Error ? error.message : '비교 시작 실패';
+    startCompareBtn.disabled = false;
+  }
+}
+
+/**
+ * 비교 작업 상태 폴링 시작
+ */
+function startComparisonTaskPolling(): void {
+  stopComparisonTaskPolling();
+
+  comparisonTaskPollingInterval = window.setInterval(async () => {
+    const response = await chrome.runtime.sendMessage({
+      type: 'GET_COMPARISON_TASK_STATE'
+    });
+
+    if (response.success && response.task) {
+      updateComparisonTaskUI(response.task);
+    }
+  }, 500);
+}
+
+/**
+ * 비교 작업 상태 폴링 중지
+ */
+function stopComparisonTaskPolling(): void {
+  if (comparisonTaskPollingInterval !== null) {
+    clearInterval(comparisonTaskPollingInterval);
+    comparisonTaskPollingInterval = null;
+  }
+}
+
+/**
+ * 비교 작업 UI 업데이트
+ */
+function updateComparisonTaskUI(task: ComparisonTask): void {
+  if (task.status === 'step1') {
+    // Step 1 완료 -> 사용자 기준 입력 대기
+    compareStep1Result.className = 'result-message loading';
+    compareStep1Result.textContent = task.message;
+
+    // 실제로는 자동으로 Step 1 진행
+    setTimeout(async () => {
+      const criteriaText = compareCriteria.value.trim();
+      const userCriteria = criteriaText.split(',').map(c => c.trim()).filter(c => c.length > 0);
+
+      await chrome.runtime.sendMessage({
+        type: 'CONTINUE_COMPARISON_STEP1',
+        userCriteria
+      });
+    }, 100);
+
+  } else if (task.status === 'step2' && task.extractedCriteria) {
+    // Step 2로 전환
+    stopComparisonTaskPolling();
+    showStep2(task.extractedCriteria);
+
+  } else if (task.status === 'analyzing') {
+    compareStep2Result.className = 'result-message loading';
+    compareStep2Result.textContent = task.message;
+
+  } else if (task.status === 'completed') {
+    stopComparisonTaskPolling();
+    compareStep2Result.className = 'result-message loading';
+    compareStep2Result.textContent = '비교 완료! 새 탭에서 결과를 확인하세요.';
+
+  } else if (task.status === 'failed') {
+    stopComparisonTaskPolling();
+    const currentStep = compareStep2.classList.contains('hidden') ? compareStep1Result : compareStep2Result;
+    currentStep.className = 'result-message error';
+    currentStep.textContent = task.error || '비교 실패';
+    startCompareBtn.disabled = false;
+  }
+}
+
+/**
+ * Step 2 UI 표시
+ */
+function showStep2(criteria: string[]): void {
+  compareStep1.classList.add('hidden');
+  compareStep2.classList.remove('hidden');
+
+  // 우선순위 리스트 렌더링
+  criteriaPriorityList.innerHTML = criteria.map((criterion, index) => `
+    <div class="priority-item">
+      <input type="number" class="priority-number" value="${index + 1}" min="1" max="${criteria.length}" data-criterion="${criterion}" />
+      <span class="criterion-name">${criterion}</span>
+    </div>
+  `).join('');
+}
+
+/**
+ * 최종 비교 분석
+ */
+async function handleFinalComparison(): Promise<void> {
+  const priorityInputs = criteriaPriorityList.querySelectorAll('.priority-number') as NodeListOf<HTMLInputElement>;
+
+  const priorities: { [key: string]: number } = {};
+  priorityInputs.forEach(input => {
+    const criterion = input.dataset.criterion!;
+    const priority = parseInt(input.value);
+    priorities[criterion] = priority;
+  });
+
+  try {
+    finalCompareBtn.disabled = true;
+    compareStep2Result.className = 'result-message loading';
+    compareStep2Result.textContent = '최종 분석을 시작하고 있습니다...';
+
+    await chrome.runtime.sendMessage({
+      type: 'CONTINUE_COMPARISON_STEP2',
+      priorities
+    });
+
+    startComparisonTaskPolling();
+
+  } catch (error) {
+    console.error('최종 분석 실패:', error);
+    compareStep2Result.className = 'result-message error';
+    compareStep2Result.textContent = error instanceof Error ? error.message : '최종 분석 실패';
+    finalCompareBtn.disabled = false;
+  }
+}

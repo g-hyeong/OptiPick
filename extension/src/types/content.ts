@@ -94,3 +94,64 @@ export interface ProductAnalysisResponse {
   product_analysis: ProductAnalysis;
   timestamp: number;
 }
+
+// ========== 비교 기능 관련 타입 ==========
+
+/**
+ * 순위별 제품 정보
+ */
+export interface RankedProduct {
+  product_name: string;
+  rank: number;
+  score: number;
+  criteria_scores: { [criterion: string]: string };
+  strengths: string[];
+  weaknesses: string[];
+}
+
+/**
+ * 비교 분석 리포트
+ */
+export interface ComparisonReportData {
+  category: string;
+  total_products: number;
+  user_criteria: string[];
+  user_priorities: { [criterion: string]: number };
+  ranked_products: RankedProduct[];
+  summary: string;
+  recommendation: string;
+}
+
+/**
+ * 비교 시작 API 요청
+ */
+export interface ComparisonStartRequest {
+  category: string;
+  products: ProductAnalysis[];
+}
+
+/**
+ * 비교 시작 API 응답
+ */
+export interface ComparisonStartResponse {
+  thread_id: string;
+  status: string;
+  question: string;
+}
+
+/**
+ * 비교 계속 API 요청
+ */
+export interface ComparisonContinueRequest {
+  user_input: string[] | { [criterion: string]: number };
+}
+
+/**
+ * 비교 계속 API 응답
+ */
+export interface ComparisonContinueResponse {
+  status: string;
+  question?: string;
+  criteria?: string[];
+  report?: ComparisonReportData;
+}
