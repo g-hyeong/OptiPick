@@ -66,3 +66,63 @@ class SummarizePageResponse(BaseModel):
         ..., description="제품 분석 결과"
     )
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
+
+
+# ========== CompareProducts 관련 스키마 ==========
+
+
+class ProductComparisonSchema(BaseModel):
+    """비교 결과 내 개별 제품 정보"""
+
+    product_name: str = Field(..., description="제품명")
+    rank: int = Field(..., description="우선순위 기반 순위")
+    score: float = Field(..., description="종합 점수")
+    criteria_scores: dict[str, str] = Field(..., description="각 기준별 평가")
+    strengths: list[str] = Field(default_factory=list, description="강점")
+    weaknesses: list[str] = Field(default_factory=list, description="약점")
+
+
+class ComparisonReportSchema(BaseModel):
+    """최종 비교 보고서"""
+
+    category: str = Field(..., description="제품 카테고리")
+    total_products: int = Field(..., description="총 제품 수")
+    user_criteria: list[str] = Field(..., description="사용자가 입력한 기준")
+    user_priorities: dict[str, int] = Field(..., description="사용자가 입력한 우선순위")
+    ranked_products: list[ProductComparisonSchema] = Field(
+        ..., description="순위별 제품 목록"
+    )
+    summary: str = Field(..., description="전체 요약")
+    recommendation: str = Field(..., description="최종 추천 및 이유")
+
+
+class CompareProductsStartRequest(BaseModel):
+    """CompareProducts 그래프 시작 요청"""
+
+    category: str = Field(..., description="제품 카테고리")
+    products: list[ProductAnalysisSchema] = Field(..., description="비교할 제품 목록")
+
+
+class CompareProductsStartResponse(BaseModel):
+    """CompareProducts 그래프 시작 응답"""
+
+    thread_id: str = Field(..., description="세션 ID")
+    status: str = Field(..., description="현재 상태")
+    question: str = Field(..., description="사용자에게 보여줄 질문")
+
+
+class CompareProductsContinueRequest(BaseModel):
+    """CompareProducts 그래프 재개 요청"""
+
+    user_input: dict | list = Field(
+        ..., description="사용자 입력 (1단계: list[str], 2단계: dict[str, int])"
+    )
+
+
+class CompareProductsContinueResponse(BaseModel):
+    """CompareProducts 그래프 재개 응답"""
+
+    status: str = Field(..., description="현재 상태")
+    question: str | None = Field(None, description="다음 질문 (있는 경우)")
+    criteria: list[str] | None = Field(None, description="추출된 비교 기준 (2단계 전)")
+    report: ComparisonReportSchema | None = Field(None, description="최종 보고서 (완료 시)")
