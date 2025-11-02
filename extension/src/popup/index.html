@@ -162,6 +162,31 @@
         border-color: #007aff;
       }
 
+      .category-filter-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+      }
+
+      .category-compare-btn {
+        padding: 4px 10px;
+        border: 1px solid #007aff;
+        border-radius: 12px;
+        background: white;
+        color: #007aff;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .category-compare-btn:hover {
+        background: #007aff;
+        color: white;
+      }
+
       .products-container {
         max-height: 420px;
         overflow-y: auto;
@@ -607,6 +632,302 @@
       .move-btn:hover {
         background: #f5f5f5;
       }
+
+      /* 새로운 비교 플로우 스타일 */
+      /* 진행 표시기 */
+      .compare-progress {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 20px 10px;
+        background: white;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .progress-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .progress-circle {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 2px solid #ddd;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: #999;
+        transition: all 0.3s;
+      }
+
+      .progress-step.active .progress-circle {
+        border-color: #007aff;
+        background: #007aff;
+        color: white;
+      }
+
+      .progress-label {
+        font-size: 11px;
+        color: #999;
+        transition: color 0.3s;
+      }
+
+      .progress-step.active .progress-label {
+        color: #007aff;
+        font-weight: 500;
+      }
+
+      .progress-line {
+        width: 40px;
+        height: 2px;
+        background: #ddd;
+        margin: 0 8px 20px;
+      }
+
+      .progress-step.active ~ .progress-line {
+        background: #ddd;
+      }
+
+      /* 비교 단계 */
+      .compare-step {
+        display: none;
+        padding: 20px;
+        animation: fadeIn 0.3s;
+      }
+
+      .compare-step.active {
+        display: block;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .step-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .step-desc {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 16px;
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      .select-all-btn {
+        padding: 4px 12px;
+        border: 1px solid #007aff;
+        border-radius: 4px;
+        background: white;
+        color: #007aff;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .select-all-btn:hover {
+        background: #007aff;
+        color: white;
+      }
+
+      .step-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 20px;
+      }
+
+      .step-actions button {
+        flex: 1;
+      }
+
+      /* Chip 입력 */
+      .chip-input-container {
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        padding: 8px;
+        background: white;
+        min-height: 80px;
+      }
+
+      .chips-display {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .criterion-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background: #e3f2fd;
+        color: #1976d2;
+        border-radius: 16px;
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .criterion-chip .remove-btn {
+        background: none;
+        border: none;
+        color: #1976d2;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0;
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .criterion-chip .remove-btn:hover {
+        color: #0d47a1;
+      }
+
+      .chip-input {
+        width: 100%;
+        border: none;
+        outline: none;
+        font-size: 14px;
+        padding: 4px 0;
+      }
+
+      .chip-input::placeholder {
+        color: #999;
+      }
+
+      /* 로딩 화면 */
+      .loading-container {
+        text-align: center;
+        padding: 40px 20px;
+      }
+
+      .loading-spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007aff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loading-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+      }
+
+      .loading-desc {
+        font-size: 13px;
+        color: #666;
+      }
+
+      /* 우선순위 선택 */
+      .selected-priorities {
+        min-height: 60px;
+        padding: 12px;
+        background: #f8f9fa;
+        border: 2px dashed #ddd;
+        border-radius: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .empty-priority-state {
+        width: 100%;
+        text-align: center;
+        color: #999;
+        font-size: 13px;
+      }
+
+      .priority-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #007aff;
+        color: white;
+        border-radius: 16px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .priority-chip:hover {
+        background: #0056b3;
+      }
+
+      .priority-number {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 2px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .available-criteria {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .available-criterion-chip {
+        padding: 6px 14px;
+        background: white;
+        color: #333;
+        border: 1px solid #ddd;
+        border-radius: 16px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .available-criterion-chip:hover {
+        border-color: #007aff;
+        color: #007aff;
+      }
+
+      .available-criterion-chip.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
     </style>
   </head>
   <body>
@@ -656,8 +977,28 @@
 
     <!-- 비교 탭 -->
     <div class="tab-content hidden" id="compareTab">
-      <!-- Step 1: 제품 및 기준 선택 -->
-      <div id="compareStep1">
+      <!-- 진행 표시기 -->
+      <div class="compare-progress" id="compareProgress">
+        <div class="progress-step active" data-step="1">
+          <div class="progress-circle">1</div>
+          <div class="progress-label">제품 선택</div>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step" data-step="2">
+          <div class="progress-circle">2</div>
+          <div class="progress-label">비교 기준</div>
+        </div>
+        <div class="progress-line"></div>
+        <div class="progress-step" data-step="3">
+          <div class="progress-circle">3</div>
+          <div class="progress-label">우선순위</div>
+        </div>
+      </div>
+
+      <!-- Step 1: 제품 선택 -->
+      <div class="compare-step active" id="compareStep1">
+        <h3 class="step-title">비교할 제품을 선택하세요</h3>
+
         <div class="compare-section">
           <label class="label">카테고리</label>
           <select id="compareCategorySelect" class="select-input">
@@ -666,43 +1007,91 @@
         </div>
 
         <div class="compare-section">
-          <label class="label">비교할 제품 선택 (2~10개)</label>
+          <div class="section-header">
+            <label class="label">제품 선택 (2~10개)</label>
+            <button class="select-all-btn" id="selectAllBtn">전체 선택</button>
+          </div>
           <div id="compareProductsList" class="products-checkbox-list">
             <!-- 동적 렌더링 -->
           </div>
           <div class="selected-count" id="selectedCount">0개 선택됨</div>
         </div>
 
-        <div class="compare-section">
-          <label class="label">중요하게 보는 기준</label>
-          <textarea
-            id="compareCriteria"
-            class="textarea-input"
-            placeholder="예: 성능, 가격, 배터리, 디자인"
-            rows="3"
-          ></textarea>
-          <div class="hint">쉼표(,)로 구분해서 입력해주세요</div>
+        <div class="step-actions">
+          <button id="step1NextBtn" class="btn-primary" disabled>다음</button>
         </div>
-
-        <button id="startCompareBtn" class="btn-primary" disabled>비교 시작</button>
         <div id="compareStep1Result" class="result-message"></div>
       </div>
 
-      <!-- Step 2: 우선순위 설정 -->
-      <div id="compareStep2" class="hidden">
+      <!-- Step 2: 비교 기준 입력 -->
+      <div class="compare-step" id="compareStep2">
+        <h3 class="step-title">중요하게 보는 기준을 입력하세요</h3>
+
         <div class="compare-section">
-          <label class="label">비교 기준 우선순위 설정</label>
-          <div class="hint">숫자를 입력해서 우선순위를 정하세요 (1위가 가장 중요)</div>
-          <div id="criteriaPriorityList" class="priority-list">
-            <!-- 동적 렌더링 -->
+          <label class="label">비교 기준 (엔터로 추가)</label>
+          <div class="chip-input-container">
+            <div class="chips-display" id="criteriaChips">
+              <!-- 입력된 chip들 -->
+            </div>
+            <input
+              type="text"
+              id="criteriaInput"
+              class="chip-input"
+              placeholder="예: 성능, 가격, 배터리 등을 입력 후 엔터"
+            />
+          </div>
+          <div class="hint">최소 1개 이상의 기준을 입력해주세요</div>
+        </div>
+
+        <div class="step-actions">
+          <button id="step2BackBtn" class="btn-secondary">이전</button>
+          <button id="step2NextBtn" class="btn-primary" disabled>다음</button>
+        </div>
+        <div id="compareStep2Result" class="result-message"></div>
+      </div>
+
+      <!-- Step 3: 분석 중 (로딩) -->
+      <div class="compare-step" id="compareStep3">
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <h3 class="loading-title">비교 기준을 분석하고 있습니다...</h3>
+          <p class="loading-desc">AI가 입력하신 기준을 바탕으로 상세한 비교 항목을 추출 중입니다.</p>
+        </div>
+      </div>
+
+      <!-- Step 4: 우선순위 선택 -->
+      <div class="compare-step" id="compareStep4">
+        <h3 class="step-title">비교 우선순위를 선택하세요</h3>
+        <p class="step-desc">중요한 순서대로 1~5개의 기준을 선택해주세요</p>
+
+        <div class="compare-section">
+          <label class="label">선택된 우선순위 (<span id="selectedPriorityCount">0</span>/5)</label>
+          <div class="selected-priorities" id="selectedPriorities">
+            <div class="empty-priority-state">아래에서 기준을 선택하세요</div>
           </div>
         </div>
 
-        <div class="button-group">
-          <button id="backToStep1Btn" class="btn-secondary">이전</button>
-          <button id="finalCompareBtn" class="btn-primary">최종 분석</button>
+        <div class="compare-section">
+          <label class="label">비교 기준 선택</label>
+          <div class="available-criteria" id="availableCriteria">
+            <!-- Agent가 추출한 기준들 -->
+          </div>
         </div>
-        <div id="compareStep2Result" class="result-message"></div>
+
+        <div class="step-actions">
+          <button id="step4BackBtn" class="btn-secondary">이전</button>
+          <button id="step4NextBtn" class="btn-primary" disabled>최종 분석</button>
+        </div>
+        <div id="compareStep4Result" class="result-message"></div>
+      </div>
+
+      <!-- Step 5: 최종 분석 중 (로딩) -->
+      <div class="compare-step" id="compareStep5">
+        <div class="loading-container">
+          <div class="loading-spinner"></div>
+          <h3 class="loading-title">최종 비교 분석 중입니다...</h3>
+          <p class="loading-desc">선택하신 제품들을 우선순위에 따라 비교 분석하고 있습니다.</p>
+        </div>
       </div>
     </div>
 

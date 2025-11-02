@@ -98,6 +98,8 @@ export interface ComparisonTask {
   selectedProductIds: string[];
   /** 사용자가 입력한 중요 기준 */
   userCriteria: string[];
+  /** 사용자가 선택한 우선순위 (순서대로 1~5개) */
+  userPriorities?: string[];
   /** 작업 상태 */
   status: ComparisonTaskStatus;
   /** 진행 메시지 */

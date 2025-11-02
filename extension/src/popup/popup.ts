@@ -27,15 +27,34 @@ const backBtn = document.getElementById('backBtn') as HTMLButtonElement;
 const compareCategorySelect = document.getElementById('compareCategorySelect') as HTMLSelectElement;
 const compareProductsList = document.getElementById('compareProductsList') as HTMLDivElement;
 const selectedCount = document.getElementById('selectedCount') as HTMLDivElement;
-const compareCriteria = document.getElementById('compareCriteria') as HTMLTextAreaElement;
-const startCompareBtn = document.getElementById('startCompareBtn') as HTMLButtonElement;
-const compareStep1Result = document.getElementById('compareStep1Result') as HTMLDivElement;
+const selectAllBtn = document.getElementById('selectAllBtn') as HTMLButtonElement;
+
+// Step 1
 const compareStep1 = document.getElementById('compareStep1') as HTMLDivElement;
+const step1NextBtn = document.getElementById('step1NextBtn') as HTMLButtonElement;
+
+// Step 2
 const compareStep2 = document.getElementById('compareStep2') as HTMLDivElement;
-const criteriaPriorityList = document.getElementById('criteriaPriorityList') as HTMLDivElement;
-const backToStep1Btn = document.getElementById('backToStep1Btn') as HTMLButtonElement;
-const finalCompareBtn = document.getElementById('finalCompareBtn') as HTMLButtonElement;
+const criteriaInput = document.getElementById('criteriaInput') as HTMLInputElement;
+const criteriaChips = document.getElementById('criteriaChips') as HTMLDivElement;
+const step2BackBtn = document.getElementById('step2BackBtn') as HTMLButtonElement;
+const step2NextBtn = document.getElementById('step2NextBtn') as HTMLButtonElement;
 const compareStep2Result = document.getElementById('compareStep2Result') as HTMLDivElement;
+
+// Step 3
+const compareStep3 = document.getElementById('compareStep3') as HTMLDivElement;
+
+// Step 4
+const compareStep4 = document.getElementById('compareStep4') as HTMLDivElement;
+const selectedPriorities = document.getElementById('selectedPriorities') as HTMLDivElement;
+const selectedPriorityCount = document.getElementById('selectedPriorityCount') as HTMLSpanElement;
+const availableCriteria = document.getElementById('availableCriteria') as HTMLDivElement;
+const step4BackBtn = document.getElementById('step4BackBtn') as HTMLButtonElement;
+const step4NextBtn = document.getElementById('step4NextBtn') as HTMLButtonElement;
+const compareStep4Result = document.getElementById('compareStep4Result') as HTMLDivElement;
+
+// Step 5
+const compareStep5 = document.getElementById('compareStep5') as HTMLDivElement;
 
 /**
  * 작업 상태 폴링 인터벌
@@ -48,6 +67,13 @@ let comparisonTaskPollingInterval: number | null = null;
  */
 let selectedCategory: string | null = null; // null이면 전체 보기
 let currentView: 'list' | 'detail' = 'list';
+
+// 비교 탭 상태
+let currentCompareStep = 1;
+let selectedProductIds: string[] = [];
+let userCriteriaList: string[] = [];
+let userPrioritiesList: string[] = [];
+let extractedCriteriaList: string[] = [];
 
 /**
  * Popup 초기화
@@ -81,7 +107,7 @@ function initTabs(): void {
 /**
  * 탭 전환
  */
-function switchTab(tab: 'analyze' | 'products' | 'compare'): void {
+function switchTab(tab: 'analyze' | 'products' | 'compare', preSelectedCategory?: string): void {
   // 탭 버튼 활성화 상태 변경
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     if ((btn as HTMLButtonElement).dataset.tab === tab) {
@@ -108,6 +134,12 @@ function switchTab(tab: 'analyze' | 'products' | 'compare'): void {
     compareTab?.classList.remove('hidden');
     productDetailTab.classList.add('hidden');
     currentView = 'list';
+
+    // 카테고리 pre-select가 있으면 설정
+    if (preSelectedCategory) {
+      compareCategorySelect.value = preSelectedCategory;
+      loadCompareProducts();
+    }
   } else {
     // products 탭
     analyzTab?.classList.add('hidden');
@@ -325,8 +357,8 @@ async function loadProductsList(): Promise<void> {
       return;
     }
 
-    // 카테고리 필터 렌더링
-    renderCategoryFilters(categories);
+    // 카테고리 필터 렌더링 (products 전달)
+    renderCategoryFilters(categories, products);
 
     // 선택된 카테고리에 따라 제품 필터링
     const filteredProducts = selectedCategory
@@ -358,21 +390,31 @@ async function loadProductsList(): Promise<void> {
 /**
  * 카테고리 필터 렌더링
  */
-function renderCategoryFilters(categories: string[]): void {
+function renderCategoryFilters(categories: string[], products: StoredProduct[]): void {
   const allChip = `
-    <div class="category-chip ${selectedCategory === null ? 'active' : ''}" data-category="">
-      전체
+    <div class="category-filter-item">
+      <div class="category-chip ${selectedCategory === null ? 'active' : ''}" data-category="">
+        전체
+      </div>
     </div>
   `;
 
   const categoryChips = categories
-    .map(
-      (category) => `
-    <div class="category-chip ${selectedCategory === category ? 'active' : ''}" data-category="${category}">
-      ${category}
+    .map((category) => {
+      // 카테고리별 제품 개수 계산
+      const categoryProducts = products.filter(p => p.category === category);
+      const count = categoryProducts.length;
+      const canCompare = count >= 2;
+
+      return `
+    <div class="category-filter-item">
+      <div class="category-chip ${selectedCategory === category ? 'active' : ''}" data-category="${category}">
+        ${category}
+      </div>
+      ${canCompare ? `<button class="category-compare-btn" data-category="${category}" title="${category} 카테고리 제품 비교">비교</button>` : ''}
     </div>
-  `
-    )
+  `;
+    })
     .join('');
 
   categoryFilters.innerHTML = allChip + categoryChips;
@@ -383,6 +425,15 @@ function renderCategoryFilters(categories: string[]): void {
       const category = (chip as HTMLElement).dataset.category || null;
       selectedCategory = category;
       loadProductsList();
+    });
+  });
+
+  // 비교 버튼 클릭 이벤트
+  categoryFilters.querySelectorAll('.category-compare-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); // 버블링 방지
+      const category = (btn as HTMLElement).dataset.category!;
+      switchTab('compare', category);
     });
   });
 }
@@ -645,28 +696,31 @@ window.addEventListener('beforeunload', () => {
 
 // ========== 비교 탭 함수 ==========
 
-let selectedProductIds: string[] = [];
-
 /**
  * 비교 탭 초기화
  */
 function initCompareTab(): void {
   // 카테고리 선택 시 제품 목록 업데이트
-  compareCategorySelect.addEventListener('change', loadCompareProducts);
+  compareCategorySelect.addEventListener('change', handleCategoryChange);
 
-  // 비교 시작 버튼
-  startCompareBtn.addEventListener('click', handleStartComparison);
+  // Step 1 버튼들
+  selectAllBtn.addEventListener('click', toggleSelectAll);
+  step1NextBtn.addEventListener('click', handleStep1Next);
 
   // Step 2 버튼들
-  backToStep1Btn.addEventListener('click', () => {
-    compareStep2.classList.add('hidden');
-    compareStep1.classList.remove('hidden');
-  });
+  criteriaInput.addEventListener('keydown', handleCriteriaKeydown);
+  step2BackBtn.addEventListener('click', () => goToStep(1));
+  step2NextBtn.addEventListener('click', handleStep2Next);
 
-  finalCompareBtn.addEventListener('click', handleFinalComparison);
+  // Step 4 버튼들
+  step4BackBtn.addEventListener('click', () => goToStep(2));
+  step4NextBtn.addEventListener('click', handleStep4Next);
 
   // 카테고리 로드
   loadCompareCategories();
+
+  // 초기 상태 설정
+  goToStep(1);
 }
 
 /**
@@ -685,6 +739,49 @@ async function loadCompareCategories(): Promise<void> {
 }
 
 /**
+ * 단계 전환
+ */
+function goToStep(step: number): void {
+  currentCompareStep = step;
+
+  // 모든 단계 숨기기
+  [compareStep1, compareStep2, compareStep3, compareStep4, compareStep5].forEach(el => {
+    el.classList.remove('active');
+  });
+
+  // 현재 단계 표시
+  if (step === 1) compareStep1.classList.add('active');
+  else if (step === 2) compareStep2.classList.add('active');
+  else if (step === 3) compareStep3.classList.add('active');
+  else if (step === 4) compareStep4.classList.add('active');
+  else if (step === 5) compareStep5.classList.add('active');
+
+  // 진행 표시기 업데이트
+  updateProgressIndicator(step);
+}
+
+/**
+ * 진행 표시기 업데이트
+ */
+function updateProgressIndicator(step: number): void {
+  const progressSteps = document.querySelectorAll('.progress-step');
+  progressSteps.forEach((el, index) => {
+    if (index + 1 <= step && step <= 3) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+/**
+ * 카테고리 변경 처리
+ */
+async function handleCategoryChange(): Promise<void> {
+  await loadCompareProducts();
+}
+
+/**
  * 비교할 제품 목록 로드
  */
 async function loadCompareProducts(): Promise<void> {
@@ -692,6 +789,7 @@ async function loadCompareProducts(): Promise<void> {
 
   if (!category) {
     compareProductsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">카테고리를 선택해주세요</div>';
+    selectedProductIds = [];
     updateSelectedCount();
     return;
   }
@@ -701,13 +799,17 @@ async function loadCompareProducts(): Promise<void> {
 
   if (filteredProducts.length === 0) {
     compareProductsList.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">이 카테고리에 제품이 없습니다</div>';
+    selectedProductIds = [];
     updateSelectedCount();
     return;
   }
 
+  // 전체 선택 기본값
+  selectedProductIds = filteredProducts.map(p => p.id);
+
   compareProductsList.innerHTML = filteredProducts.map(product => `
     <div class="product-checkbox-item">
-      <input type="checkbox" id="product-${product.id}" value="${product.id}" ${selectedProductIds.includes(product.id) ? 'checked' : ''} />
+      <input type="checkbox" id="product-${product.id}" value="${product.id}" checked />
       <label for="product-${product.id}" class="product-checkbox-label">
         ${product.title} (${product.price})
       </label>
@@ -736,37 +838,131 @@ async function loadCompareProducts(): Promise<void> {
 }
 
 /**
+ * 전체 선택/해제 토글
+ */
+function toggleSelectAll(): void {
+  const checkboxes = compareProductsList.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+  const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+
+  checkboxes.forEach(cb => {
+    cb.checked = !allChecked;
+    const productId = cb.value;
+
+    if (cb.checked) {
+      if (!selectedProductIds.includes(productId)) {
+        selectedProductIds.push(productId);
+      }
+    } else {
+      selectedProductIds = selectedProductIds.filter(id => id !== productId);
+    }
+  });
+
+  selectAllBtn.textContent = allChecked ? '전체 선택' : '전체 해제';
+  updateSelectedCount();
+}
+
+/**
  * 선택된 제품 수 업데이트
  */
 function updateSelectedCount(): void {
   const count = selectedProductIds.length;
   selectedCount.textContent = `${count}개 선택됨`;
 
-  // 버튼 활성화 조건: 2~10개
-  const isValid = count >= 2 && count <= 10 && compareCriteria.value.trim().length > 0;
-  startCompareBtn.disabled = !isValid;
+  // 전체 선택 버튼 텍스트 업데이트
+  const checkboxes = compareProductsList.querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+  const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+  selectAllBtn.textContent = allChecked ? '전체 해제' : '전체 선택';
+
+  // Step 1 다음 버튼 활성화 조건: 2~10개
+  const isValid = count >= 2 && count <= 10;
+  step1NextBtn.disabled = !isValid;
 }
 
-// 기준 입력 시에도 버튼 활성화 체크
-compareCriteria.addEventListener('input', updateSelectedCount);
+/**
+ * Step 1: 다음 버튼
+ */
+function handleStep1Next(): void {
+  if (selectedProductIds.length < 2 || selectedProductIds.length > 10) {
+    return;
+  }
+  goToStep(2);
+}
 
 /**
- * 비교 시작
+ * Step 2: 기준 입력 엔터 처리
  */
-async function handleStartComparison(): Promise<void> {
-  const category = compareCategorySelect.value;
-  const criteriaText = compareCriteria.value.trim();
+function handleCriteriaKeydown(e: KeyboardEvent): void {
+  // 한글 입력 중(composing) 엔터는 무시 (조합 완료만 수행)
+  if (e.key === 'Enter' && !e.isComposing) {
+    e.preventDefault();
+    const value = criteriaInput.value.trim();
+    if (value && !userCriteriaList.includes(value)) {
+      addCriterion(value);
+      criteriaInput.value = '';
+    }
+  }
+}
 
-  if (!category || selectedProductIds.length < 2 || selectedProductIds.length > 10 || !criteriaText) {
+/**
+ * 기준 추가
+ */
+function addCriterion(criterion: string): void {
+  userCriteriaList.push(criterion);
+  renderCriteriaChips();
+  updateStep2NextBtn();
+}
+
+/**
+ * 기준 삭제
+ */
+function removeCriterion(criterion: string): void {
+  userCriteriaList = userCriteriaList.filter(c => c !== criterion);
+  renderCriteriaChips();
+  updateStep2NextBtn();
+}
+
+/**
+ * 기준 chip 렌더링
+ */
+function renderCriteriaChips(): void {
+  criteriaChips.innerHTML = userCriteriaList.map(criterion => `
+    <div class="criterion-chip">
+      ${criterion}
+      <button class="remove-btn" data-criterion="${criterion}">×</button>
+    </div>
+  `).join('');
+
+  // 삭제 버튼 이벤트
+  criteriaChips.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const criterion = (e.target as HTMLElement).dataset.criterion!;
+      removeCriterion(criterion);
+    });
+  });
+}
+
+/**
+ * Step 2 다음 버튼 활성화 업데이트
+ */
+function updateStep2NextBtn(): void {
+  step2NextBtn.disabled = userCriteriaList.length === 0;
+}
+
+/**
+ * Step 2: 다음 버튼 (Agent 호출)
+ */
+async function handleStep2Next(): Promise<void> {
+  if (userCriteriaList.length === 0) {
     return;
   }
 
   try {
-    startCompareBtn.disabled = true;
-    compareStep1Result.className = 'result-message loading';
-    compareStep1Result.textContent = '비교 분석을 시작하고 있습니다...';
+    const category = compareCategorySelect.value;
 
-    // Background에 메시지 전송
+    // Step 3 (로딩) 표시
+    goToStep(3);
+
+    // Background에 비교 시작 메시지 전송
     await chrome.runtime.sendMessage({
       type: 'START_COMPARISON',
       category,
@@ -778,9 +974,9 @@ async function handleStartComparison(): Promise<void> {
 
   } catch (error) {
     console.error('비교 시작 실패:', error);
-    compareStep1Result.className = 'result-message error';
-    compareStep1Result.textContent = error instanceof Error ? error.message : '비교 시작 실패';
-    startCompareBtn.disabled = false;
+    compareStep2Result.className = 'result-message error';
+    compareStep2Result.textContent = error instanceof Error ? error.message : '비교 시작 실패';
+    goToStep(2);
   }
 }
 
@@ -816,77 +1012,131 @@ function stopComparisonTaskPolling(): void {
  */
 function updateComparisonTaskUI(task: ComparisonTask): void {
   if (task.status === 'step1') {
-    // Step 1 완료 -> 사용자 기준 입력 대기
-    compareStep1Result.className = 'result-message loading';
-    compareStep1Result.textContent = task.message;
-
-    // 실제로는 자동으로 Step 1 진행
+    // Step 1 완료 -> 자동으로 사용자 기준 전송
     setTimeout(async () => {
-      const criteriaText = compareCriteria.value.trim();
-      const userCriteria = criteriaText.split(',').map(c => c.trim()).filter(c => c.length > 0);
-
       await chrome.runtime.sendMessage({
         type: 'CONTINUE_COMPARISON_STEP1',
-        userCriteria
+        userCriteria: userCriteriaList
       });
     }, 100);
 
   } else if (task.status === 'step2' && task.extractedCriteria) {
-    // Step 2로 전환
+    // Step 4로 전환 (우선순위 선택)
     stopComparisonTaskPolling();
-    showStep2(task.extractedCriteria);
+    extractedCriteriaList = task.extractedCriteria;
+    goToStep(4);
+    renderAvailableCriteria();
 
   } else if (task.status === 'analyzing') {
-    compareStep2Result.className = 'result-message loading';
-    compareStep2Result.textContent = task.message;
+    // Step 5 (최종 분석 중)
+    if (currentCompareStep !== 5) {
+      goToStep(5);
+    }
 
   } else if (task.status === 'completed') {
     stopComparisonTaskPolling();
-    compareStep2Result.className = 'result-message loading';
-    compareStep2Result.textContent = '비교 완료! 새 탭에서 결과를 확인하세요.';
+    // 결과는 자동으로 새 탭에서 열림
 
   } else if (task.status === 'failed') {
     stopComparisonTaskPolling();
-    const currentStep = compareStep2.classList.contains('hidden') ? compareStep1Result : compareStep2Result;
-    currentStep.className = 'result-message error';
-    currentStep.textContent = task.error || '비교 실패';
-    startCompareBtn.disabled = false;
+    compareStep4Result.className = 'result-message error';
+    compareStep4Result.textContent = task.error || '비교 실패';
+    goToStep(4);
   }
 }
 
 /**
- * Step 2 UI 표시
+ * Step 4: 추출된 기준 렌더링
  */
-function showStep2(criteria: string[]): void {
-  compareStep1.classList.add('hidden');
-  compareStep2.classList.remove('hidden');
-
-  // 우선순위 리스트 렌더링
-  criteriaPriorityList.innerHTML = criteria.map((criterion, index) => `
-    <div class="priority-item">
-      <input type="number" class="priority-number" value="${index + 1}" min="1" max="${criteria.length}" data-criterion="${criterion}" />
-      <span class="criterion-name">${criterion}</span>
+function renderAvailableCriteria(): void {
+  availableCriteria.innerHTML = extractedCriteriaList.map(criterion => `
+    <div class="available-criterion-chip" data-criterion="${criterion}">
+      ${criterion}
     </div>
   `).join('');
+
+  // 기준 클릭 이벤트
+  availableCriteria.querySelectorAll('.available-criterion-chip').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      const criterion = (e.target as HTMLElement).dataset.criterion!;
+      handleCriterionClick(criterion);
+    });
+  });
 }
 
 /**
- * 최종 비교 분석
+ * Step 4: 기준 클릭 처리
  */
-async function handleFinalComparison(): Promise<void> {
-  const priorityInputs = criteriaPriorityList.querySelectorAll('.priority-number') as NodeListOf<HTMLInputElement>;
+function handleCriterionClick(criterion: string): void {
+  if (userPrioritiesList.includes(criterion)) {
+    // 이미 선택됨 -> 제거
+    userPrioritiesList = userPrioritiesList.filter(c => c !== criterion);
+  } else {
+    // 선택 추가 (최대 5개)
+    if (userPrioritiesList.length < 5) {
+      userPrioritiesList.push(criterion);
+    }
+  }
 
-  const priorities: { [key: string]: number } = {};
-  priorityInputs.forEach(input => {
-    const criterion = input.dataset.criterion!;
-    const priority = parseInt(input.value);
-    priorities[criterion] = priority;
+  updateSelectedPriorities();
+}
+
+/**
+ * Step 4: 선택된 우선순위 업데이트
+ */
+function updateSelectedPriorities(): void {
+  selectedPriorityCount.textContent = userPrioritiesList.length.toString();
+
+  if (userPrioritiesList.length === 0) {
+    selectedPriorities.innerHTML = '<div class="empty-priority-state">아래에서 기준을 선택하세요</div>';
+  } else {
+    selectedPriorities.innerHTML = userPrioritiesList.map((criterion, index) => `
+      <div class="priority-chip" data-criterion="${criterion}">
+        <span class="priority-number">${index + 1}</span>
+        ${criterion}
+      </div>
+    `).join('');
+
+    // 클릭 시 제거
+    selectedPriorities.querySelectorAll('.priority-chip').forEach(chip => {
+      chip.addEventListener('click', (e) => {
+        const criterion = (e.currentTarget as HTMLElement).dataset.criterion!;
+        handleCriterionClick(criterion);
+      });
+    });
+  }
+
+  // available criteria 업데이트 (선택된 것 disabled)
+  availableCriteria.querySelectorAll('.available-criterion-chip').forEach(chip => {
+    const criterion = (chip as HTMLElement).dataset.criterion!;
+    if (userPrioritiesList.includes(criterion)) {
+      chip.classList.add('disabled');
+    } else {
+      chip.classList.remove('disabled');
+    }
   });
 
+  // Step 4 다음 버튼 활성화 조건: 1~5개
+  step4NextBtn.disabled = userPrioritiesList.length === 0;
+}
+
+/**
+ * Step 4: 최종 분석 버튼
+ */
+async function handleStep4Next(): Promise<void> {
+  if (userPrioritiesList.length === 0) {
+    return;
+  }
+
   try {
-    finalCompareBtn.disabled = true;
-    compareStep2Result.className = 'result-message loading';
-    compareStep2Result.textContent = '최종 분석을 시작하고 있습니다...';
+    // 우선순위를 객체로 변환 (기존 API 호환)
+    const priorities: { [key: string]: number } = {};
+    userPrioritiesList.forEach((criterion, index) => {
+      priorities[criterion] = index + 1;
+    });
+
+    // Step 5 (로딩) 표시
+    goToStep(5);
 
     await chrome.runtime.sendMessage({
       type: 'CONTINUE_COMPARISON_STEP2',
@@ -897,8 +1147,8 @@ async function handleFinalComparison(): Promise<void> {
 
   } catch (error) {
     console.error('최종 분석 실패:', error);
-    compareStep2Result.className = 'result-message error';
-    compareStep2Result.textContent = error instanceof Error ? error.message : '최종 분석 실패';
-    finalCompareBtn.disabled = false;
+    compareStep4Result.className = 'result-message error';
+    compareStep4Result.textContent = error instanceof Error ? error.message : '최종 분석 실패';
+    goToStep(4);
   }
 }
