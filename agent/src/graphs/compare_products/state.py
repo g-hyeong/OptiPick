@@ -21,9 +21,7 @@ class ProductComparison(TypedDict):
     """비교 결과 내 개별 제품 정보"""
 
     product_name: str  # 제품명
-    rank: int  # 우선순위 기반 순위
-    score: float  # 종합 점수
-    criteria_scores: dict[str, str]  # 각 기준별 평가
+    criteria_scores: dict[str, float]  # 각 기준별 점수 (0-100)
     strengths: list[str]  # 강점
     weaknesses: list[str]  # 약점
 
@@ -35,7 +33,7 @@ class ComparisonReport(TypedDict):
     total_products: int  # 총 제품 수
     user_criteria: list[str]  # 사용자가 입력한 기준
     user_priorities: dict[str, int]  # 사용자가 입력한 우선순위
-    ranked_products: list[ProductComparison]  # 순위별 제품 목록
+    products: list[ProductComparison]  # 제품 목록 (순위 없음, Extension에서 계산)
     summary: str  # 전체 요약
     recommendation: str  # 최종 추천 및 이유
 

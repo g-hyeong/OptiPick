@@ -1,8 +1,69 @@
 import type { ComparisonTask } from '@/types/storage';
-import type { ComparisonReportData } from '@/types/content';
+import type { ComparisonReportData, ProductComparison, RankedProduct } from '@/types/content';
 
 let currentTask: ComparisonTask | null = null;
 let selectedProductsForComparison: string[] = [];
+
+/**
+ * 우선순위 기준으로 가중치 계산
+ * 우선순위: 1순위=5, 2순위=4, 3순위=3, 4순위=2, 5순위=1
+ */
+function getPriorityWeight(priority: number): number {
+  return Math.max(6 - priority, 0);
+}
+
+/**
+ * 제품의 최종 점수 계산 (우선순위 기반 가중 평균)
+ */
+function calculateFinalScore(
+  product: ProductComparison,
+  userPriorities: string[]
+): number {
+  if (userPriorities.length === 0) {
+    // 우선순위가 없으면 모든 기준의 평균
+    const scores = Object.values(product.criteria_scores);
+    return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  }
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  userPriorities.forEach((criterion, index) => {
+    const priority = index + 1; // 1-based priority
+    const weight = getPriorityWeight(priority);
+    const score = product.criteria_scores[criterion] || 0;
+
+    weightedSum += score * weight;
+    totalWeight += weight;
+  });
+
+  return totalWeight > 0 ? weightedSum / totalWeight : 0;
+}
+
+/**
+ * 제품들의 순위 결정
+ */
+function rankProducts(
+  products: ProductComparison[],
+  userPriorities: string[]
+): RankedProduct[] {
+  // 최종 점수 계산
+  const productsWithScore = products.map(product => ({
+    ...product,
+    score: calculateFinalScore(product, userPriorities),
+    rank: 0 // 임시값
+  }));
+
+  // 점수 기준 내림차순 정렬
+  productsWithScore.sort((a, b) => b.score - a.score);
+
+  // 순위 할당
+  productsWithScore.forEach((product, index) => {
+    product.rank = index + 1;
+  });
+
+  return productsWithScore;
+}
 
 /**
  * 비교 결과 렌더링
@@ -15,7 +76,10 @@ async function renderReport(): Promise<void> {
     const result = await chrome.storage.local.get('currentComparisonTask');
     const task: ComparisonTask | null = result.currentComparisonTask;
 
+    console.log('[Report] Task loaded:', task);
+
     if (!task || !task.report) {
+      console.error('[Report] No task or report found');
       appDiv.innerHTML = '<div class="error">비교 결과를 찾을 수 없습니다.</div>';
       return;
     }
@@ -23,30 +87,58 @@ async function renderReport(): Promise<void> {
     currentTask = task;
     const report = task.report;
 
+    console.log('[Report] Report data:', report);
+    console.log('[Report] Products:', report.products);
+
+    // products가 없거나 배열이 아닌 경우 처리
+    if (!report.products || !Array.isArray(report.products)) {
+      console.error('[Report] Invalid products data:', report.products);
+      appDiv.innerHTML = '<div class="error">제품 데이터가 올바르지 않습니다.</div>';
+      return;
+    }
+
+    // user_priorities를 순서대로 정렬하여 배열로 변환
+    // user_priorities는 { "기준명": 순위 } 형태
+    let userPrioritiesArray: string[] = [];
+    if (task.userPriorities && Array.isArray(task.userPriorities)) {
+      // 이미 배열 형태면 그대로 사용
+      userPrioritiesArray = task.userPriorities;
+    } else if (report.user_priorities && typeof report.user_priorities === 'object') {
+      // dict 형태면 순위대로 정렬하여 배열로 변환
+      userPrioritiesArray = Object.entries(report.user_priorities)
+        .sort(([, a], [, b]) => a - b)
+        .map(([criterion]) => criterion);
+    }
+    console.log('[Report] User priorities array:', userPrioritiesArray);
+
+    // 순위 계산
+    const rankedProducts = rankProducts(report.products, userPrioritiesArray);
+    console.log('[Report] Ranked products:', rankedProducts);
+
     // 기본 선택: 1위와 2위
-    if (report.ranked_products.length >= 2) {
+    if (rankedProducts.length >= 2) {
       selectedProductsForComparison = [
-        report.ranked_products[0].product_name,
-        report.ranked_products[1].product_name
+        rankedProducts[0].product_name,
+        rankedProducts[1].product_name
       ];
     }
 
-    // HTML 렌더링
-    appDiv.innerHTML = renderReportHTML(report, task.userPriorities);
+    // HTML 렌더링 (순위가 계산된 제품 사용)
+    appDiv.innerHTML = renderReportHTML(report, rankedProducts, userPrioritiesArray);
 
     // 이벤트 리스너 등록
     attachEventListeners();
 
   } catch (error) {
-    console.error('결과 로드 실패:', error);
-    appDiv.innerHTML = '<div class="error">결과 로드에 실패했습니다.</div>';
+    console.error('[Report] 결과 로드 실패:', error);
+    appDiv.innerHTML = `<div class="error">결과 로드에 실패했습니다.<br/><small>${error instanceof Error ? error.message : String(error)}</small></div>`;
   }
 }
 
 /**
  * 리포트 HTML 생성
  */
-function renderReportHTML(report: ComparisonReportData, userPriorities?: string[]): string {
+function renderReportHTML(report: ComparisonReportData, rankedProducts: RankedProduct[], userPriorities?: string[]): string {
   return `
     <div class="container">
       <!-- 헤더 -->
@@ -79,12 +171,12 @@ function renderReportHTML(report: ComparisonReportData, userPriorities?: string[
       <div class="section">
         <div class="section-title">🏆 순위별 제품</div>
         <div class="product-cards">
-          ${report.ranked_products.map(product => renderProductCard(product, userPriorities)).join('')}
+          ${rankedProducts.map(product => renderProductCard(product, userPriorities)).join('')}
         </div>
       </div>
 
       <!-- 기준별 비교표 -->
-      ${renderComparisonTable(report)}
+      ${renderComparisonTable(rankedProducts)}
 
       <!-- 최종 추천 -->
       <div class="section">
@@ -108,7 +200,7 @@ function renderReportHTML(report: ComparisonReportData, userPriorities?: string[
 /**
  * 제품 카드 렌더링 (축소 모드)
  */
-function renderProductCard(product: any, userPriorities?: string[]): string {
+function renderProductCard(product: RankedProduct, userPriorities?: string[]): string {
   // 우선순위 기준 표시 (상위 3개만)
   const priorityCriteria = userPriorities ?
     userPriorities.slice(0, 3).filter(p => p in product.criteria_scores) :
@@ -124,7 +216,7 @@ function renderProductCard(product: any, userPriorities?: string[]): string {
         ${priorityCriteria.map((criterion: string) => `
           <div class="criteria-item">
             <span class="criteria-label">${criterion}</span>
-            <span class="criteria-value">${product.criteria_scores[criterion] || '-'}</span>
+            <span class="criteria-value">${product.criteria_scores[criterion]?.toFixed(0) || '-'}점</span>
           </div>
         `).join('')}
       </div>
@@ -137,7 +229,7 @@ function renderProductCard(product: any, userPriorities?: string[]): string {
 /**
  * 제품 상세 정보 (모달용)
  */
-function renderProductDetail(product: any, userPriorities?: string[]): string {
+function renderProductDetail(product: RankedProduct, userPriorities?: string[]): string {
   return `
     <div class="product-rank rank-${product.rank}">${product.rank}위</div>
     <div class="product-name" style="font-size: 22px; margin-bottom: 12px;">${product.product_name}</div>
@@ -145,12 +237,12 @@ function renderProductDetail(product: any, userPriorities?: string[]): string {
 
     <div class="criteria-list" style="margin-top: 20px;">
       <h3 style="font-size: 16px; margin-bottom: 12px;">기준별 점수</h3>
-      ${Object.entries(product.criteria_scores).map(([criterion, value]) => {
+      ${Object.entries(product.criteria_scores).map(([criterion, score]) => {
         const isPriority = userPriorities && userPriorities.includes(criterion);
         return `
           <div class="criteria-item">
             <span class="criteria-label">${criterion} ${isPriority ? '⭐' : ''}</span>
-            <span class="criteria-value">${value}</span>
+            <span class="criteria-value">${score.toFixed(0)}점</span>
           </div>
         `;
       }).join('')}
@@ -181,8 +273,8 @@ function renderProductDetail(product: any, userPriorities?: string[]): string {
 /**
  * 비교표 렌더링
  */
-function renderComparisonTable(report: ComparisonReportData): string {
-  if (report.ranked_products.length === 0) return '';
+function renderComparisonTable(rankedProducts: RankedProduct[]): string {
+  if (rankedProducts.length === 0) return '';
 
   return `
     <div class="section" id="comparisonSection">
@@ -192,7 +284,7 @@ function renderComparisonTable(report: ComparisonReportData): string {
       <div class="product-selector">
         <div class="product-selector-title">비교할 제품 선택 (2~3개)</div>
         <div class="product-chips">
-          ${report.ranked_products.map(p => `
+          ${rankedProducts.map(p => `
             <div class="product-chip ${selectedProductsForComparison.includes(p.product_name) ? 'selected' : ''}"
                  data-product-name="${p.product_name}">
               ${p.product_name}
@@ -215,7 +307,9 @@ function updateComparisonTable(userPriorities?: string[]): void {
   if (!currentTask?.report) return;
 
   const report = currentTask.report;
-  const selectedProducts = report.ranked_products.filter(p =>
+  const userPrioritiesArray = userPriorities || getUserPrioritiesArray();
+  const rankedProducts = rankProducts(report.products, userPrioritiesArray);
+  const selectedProducts = rankedProducts.filter(p =>
     selectedProductsForComparison.includes(p.product_name)
   );
 
@@ -232,12 +326,12 @@ function updateComparisonTable(userPriorities?: string[]): void {
     </thead>
     <tbody>
       ${criteria.map(criterion => {
-        const isPriority = userPriorities && userPriorities.includes(criterion);
+        const isPriority = userPrioritiesArray && userPrioritiesArray.includes(criterion);
         return `
           <tr>
             <td><strong>${criterion} ${isPriority ? '⭐' : ''}</strong></td>
             ${selectedProducts.map(p => `
-              <td>${p.criteria_scores[criterion] || '-'}</td>
+              <td>${p.criteria_scores[criterion]?.toFixed(0) || '-'}점</td>
             `).join('')}
           </tr>
         `;
@@ -288,7 +382,29 @@ function attachEventListeners(): void {
   });
 
   // 초기 테이블 렌더링
-  updateComparisonTable(currentTask?.userPriorities);
+  const userPrioritiesArray = getUserPrioritiesArray();
+  updateComparisonTable(userPrioritiesArray);
+}
+
+/**
+ * 사용자 우선순위를 배열로 변환
+ */
+function getUserPrioritiesArray(): string[] {
+  if (!currentTask?.report) return [];
+
+  const task = currentTask;
+  const report = task.report;
+
+  if (!report) return [];
+
+  if (task.userPriorities && Array.isArray(task.userPriorities)) {
+    return task.userPriorities;
+  } else if (report.user_priorities && typeof report.user_priorities === 'object') {
+    return Object.entries(report.user_priorities)
+      .sort(([, a], [, b]) => a - b)
+      .map(([criterion]) => criterion);
+  }
+  return [];
 }
 
 /**
@@ -297,14 +413,19 @@ function attachEventListeners(): void {
 function openProductModal(productRank: number): void {
   if (!currentTask?.report) return;
 
-  const product = currentTask.report.ranked_products.find(p => p.rank === productRank);
+  const userPrioritiesArray = getUserPrioritiesArray();
+  const rankedProducts = rankProducts(
+    currentTask.report.products,
+    userPrioritiesArray
+  );
+  const product = rankedProducts.find(p => p.rank === productRank);
   if (!product) return;
 
   const modalBody = document.getElementById('modalBody');
   const modal = document.getElementById('productModal');
 
   if (modalBody && modal) {
-    modalBody.innerHTML = renderProductDetail(product, currentTask.userPriorities);
+    modalBody.innerHTML = renderProductDetail(product, userPrioritiesArray);
     modal.classList.add('active');
   }
 }

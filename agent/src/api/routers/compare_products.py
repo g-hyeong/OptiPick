@@ -252,9 +252,7 @@ async def continue_compare_products(
                 extra={
                     "thread_id": thread_id,
                     "total_products": comparison_report.get("total_products", 0),
-                    "top_product": comparison_report.get("ranked_products", [{}])[
-                        0
-                    ].get("product_name", "unknown"),
+                    "products_count": len(comparison_report.get("products", [])),
                     "execution_time_seconds": round(execution_time, 2),
                 },
             )

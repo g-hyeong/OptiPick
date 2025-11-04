@@ -21,9 +21,7 @@ class ProductComparisonOutput(BaseModel):
     """개별 제품 비교 결과"""
 
     product_name: str = Field(..., description="제품명")
-    rank: int = Field(..., description="순위")
-    score: float = Field(..., description="종합 점수")
-    criteria_scores: dict[str, str] = Field(..., description="기준별 평가")
+    criteria_scores: dict[str, float] = Field(..., description="기준별 점수 (0-100)")
     strengths: list[str] = Field(..., description="강점")
     weaknesses: list[str] = Field(..., description="약점")
 
@@ -35,7 +33,7 @@ class ComparisonReportOutput(BaseModel):
     total_products: int = Field(..., description="총 제품 수")
     user_criteria: list[str] = Field(..., description="사용자 입력 기준")
     user_priorities: dict[str, int] = Field(..., description="사용자 우선순위")
-    ranked_products: list[ProductComparisonOutput] = Field(..., description="순위별 제품")
+    products: list[ProductComparisonOutput] = Field(..., description="제품 목록")
     summary: str = Field(..., description="전체 요약")
     recommendation: str = Field(..., description="최종 추천")
 
@@ -99,16 +97,14 @@ async def generate_report_node(state: CompareProductsState) -> dict:
             "total_products": result.total_products,
             "user_criteria": result.user_criteria,
             "user_priorities": result.user_priorities,
-            "ranked_products": [
+            "products": [
                 {
                     "product_name": p.product_name,
-                    "rank": p.rank,
-                    "score": p.score,
                     "criteria_scores": p.criteria_scores,
                     "strengths": p.strengths,
                     "weaknesses": p.weaknesses,
                 }
-                for p in result.ranked_products
+                for p in result.products
             ],
             "summary": result.summary,
             "recommendation": result.recommendation,
@@ -116,8 +112,7 @@ async def generate_report_node(state: CompareProductsState) -> dict:
 
         # 결과 로깅
         logger.info(f"  Report generated successfully")
-        logger.info(f"  Top recommendation: {result.ranked_products[0].product_name}")
-        logger.info(f"    Rank: 1, Score: {result.ranked_products[0].score}")
+        logger.info(f"  Products evaluated: {len(result.products)}")
         logger.info(f"  Summary: {result.summary[:100]}...")
 
         return {"comparison_report": comparison_report}
@@ -130,7 +125,7 @@ async def generate_report_node(state: CompareProductsState) -> dict:
             "total_products": len(state.get("products", [])),
             "user_criteria": state.get("user_criteria", []),
             "user_priorities": state.get("user_priorities", {}),
-            "ranked_products": [],
+            "products": [],
             "summary": "Report generation failed. Please try again.",
             "recommendation": "Unable to generate recommendation at this time.",
         }

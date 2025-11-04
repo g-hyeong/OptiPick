@@ -98,15 +98,21 @@ export interface ProductAnalysisResponse {
 // ========== 비교 기능 관련 타입 ==========
 
 /**
- * 순위별 제품 정보
+ * 제품 비교 정보 (Agent로부터 받는 데이터)
  */
-export interface RankedProduct {
+export interface ProductComparison {
   product_name: string;
-  rank: number;
-  score: number;
-  criteria_scores: { [criterion: string]: string };
+  criteria_scores: { [criterion: string]: number }; // 0-100 점수
   strengths: string[];
   weaknesses: string[];
+}
+
+/**
+ * 순위가 계산된 제품 정보 (Extension에서 계산)
+ */
+export interface RankedProduct extends ProductComparison {
+  rank: number;
+  score: number; // 우선순위 기반 최종 점수
 }
 
 /**
@@ -117,7 +123,7 @@ export interface ComparisonReportData {
   total_products: number;
   user_criteria: string[];
   user_priorities: { [criterion: string]: number };
-  ranked_products: RankedProduct[];
+  products: ProductComparison[]; // rank 없음, Extension에서 계산
   summary: string;
   recommendation: string;
 }

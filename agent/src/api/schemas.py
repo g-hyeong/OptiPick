@@ -75,9 +75,7 @@ class ProductComparisonSchema(BaseModel):
     """비교 결과 내 개별 제품 정보"""
 
     product_name: str = Field(..., description="제품명")
-    rank: int = Field(..., description="우선순위 기반 순위")
-    score: float = Field(..., description="종합 점수")
-    criteria_scores: dict[str, str] = Field(..., description="각 기준별 평가")
+    criteria_scores: dict[str, float] = Field(..., description="각 기준별 점수 (0-100)")
     strengths: list[str] = Field(default_factory=list, description="강점")
     weaknesses: list[str] = Field(default_factory=list, description="약점")
 
@@ -89,8 +87,8 @@ class ComparisonReportSchema(BaseModel):
     total_products: int = Field(..., description="총 제품 수")
     user_criteria: list[str] = Field(..., description="사용자가 입력한 기준")
     user_priorities: dict[str, int] = Field(..., description="사용자가 입력한 우선순위")
-    ranked_products: list[ProductComparisonSchema] = Field(
-        ..., description="순위별 제품 목록"
+    products: list[ProductComparisonSchema] = Field(
+        ..., description="제품 목록 (순위 없음, Extension에서 계산)"
     )
     summary: str = Field(..., description="전체 요약")
     recommendation: str = Field(..., description="최종 추천 및 이유")
