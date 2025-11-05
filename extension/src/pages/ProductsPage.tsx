@@ -37,9 +37,9 @@ export function ProductsPage() {
     : history;
 
   // 히스토리에서 비교 결과 열기
-  const openComparisonReport = (historyId: string) => {
-    const url = chrome.runtime.getURL(`/src/compare-report/index.html?historyId=${historyId}`);
-    window.open(url, "_blank");
+  const openComparisonReport = async (historyId: string) => {
+    const url = chrome.runtime.getURL(`src/compare-report/index.html?historyId=${historyId}`);
+    await chrome.tabs.create({ url });
   };
 
   return (
