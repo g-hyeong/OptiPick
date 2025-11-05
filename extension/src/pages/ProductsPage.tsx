@@ -43,7 +43,7 @@ export function ProductsPage() {
   };
 
   return (
-    <div className="p-4 max-w-full overflow-x-hidden">
+    <div className="p-4 w-full">
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-primary-800 mb-3">
           {activeTab === "products" ? "제품 목록" : "분석 히스토리"}

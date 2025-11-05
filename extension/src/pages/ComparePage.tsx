@@ -40,7 +40,7 @@ export function ComparePage() {
   };
 
   return (
-    <div className="p-4 space-y-4 max-w-full overflow-x-hidden">
+    <div className="p-4 space-y-4 w-full">
       <div>
         <h1 className="text-2xl font-bold text-primary-800 mb-2">제품 비교</h1>
         <p className="text-sm text-primary-600">

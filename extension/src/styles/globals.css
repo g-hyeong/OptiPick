@@ -5,11 +5,13 @@
 @layer base {
   * {
     @apply border-warm-200;
+    box-sizing: border-box;
   }
 
   html, body {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
   }
 
   body {
@@ -19,11 +21,12 @@
   /* Popup용 크기 제약 (Chrome Extension Popup) */
   body[data-context="popup"],
   body[data-context="popup"] #root {
-    width: 900px;
+    width: 750px;
     min-height: 600px;
-    max-height: 700px;
+    max-height: 600px;
     overflow-x: hidden;
     overflow-y: auto;
+    box-sizing: border-box;
   }
 
   /* 일반 페이지(compare-report)는 제약 없이 반응형 */
