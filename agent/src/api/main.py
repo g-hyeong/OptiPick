@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 # FastAPI app 생성
 app = FastAPI(
-    title="SmartCompare Agent API",
+    title="OptiPick Agent API",
     description="LangGraph-based agent for product analysis",
     version="0.1.0",
 )
@@ -45,7 +45,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "ok", "service": "smartcompare-agent"}
+    return {"status": "ok", "service": "optipick-agent"}
 
 
 # 라우터 등록
@@ -57,10 +57,10 @@ app.include_router(compare_products.router)
 @app.on_event("startup")
 async def startup_event():
     """서버 시작 시 실행"""
-    logger.info("SmartCompare Agent API server started")
+    logger.info("OptiPick Agent API server started")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """서버 종료 시 실행"""
-    logger.info("SmartCompare Agent API server shutdown")
+    logger.info("OptiPick Agent API server shutdown")

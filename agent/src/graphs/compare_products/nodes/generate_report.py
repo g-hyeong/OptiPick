@@ -22,6 +22,9 @@ class ProductComparisonOutput(BaseModel):
 
     product_name: str = Field(..., description="제품명")
     criteria_scores: dict[str, float] = Field(..., description="기준별 점수 (0-100)")
+    criteria_specs: dict[str, str] = Field(
+        default_factory=dict, description="기준별 실제 스펙 값 (예: 'RAM: 16GB DDR5', '무게: 1.4kg')"
+    )
     strengths: list[str] = Field(..., description="강점")
     weaknesses: list[str] = Field(..., description="약점")
 
@@ -101,6 +104,7 @@ async def generate_report_node(state: CompareProductsState) -> dict:
                 {
                     "product_name": p.product_name,
                     "criteria_scores": p.criteria_scores,
+                    "criteria_specs": p.criteria_specs,
                     "strengths": p.strengths,
                     "weaknesses": p.weaknesses,
                 }

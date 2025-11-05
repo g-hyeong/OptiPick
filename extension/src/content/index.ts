@@ -5,7 +5,7 @@ import { extractPageContent } from './parsers';
  * Content Script 초기화
  */
 function init(): void {
-  console.log('SmartCompare Content Script loaded');
+  console.log('OptiPick Content Script loaded');
 
   // 메시지 리스너 등록
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

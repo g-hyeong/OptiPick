@@ -248,6 +248,7 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
     {
       "product_name": "string",
       "criteria_scores": {"criterion": score},
+      "criteria_specs": {"criterion": "spec_value"},
       "strengths": ["string"],
       "weaknesses": ["string"]
     }
@@ -265,6 +266,10 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
     - 41-60: 보통
     - 61-80: 우수
     - 81-100: 매우 우수
+  - `criteria_specs`: 각 기준별 실제 스펙 값 (string)
+    - 제품 정보에서 추출한 실제 값
+    - 예: "16GB DDR5", "1.4kg", "22시간", "250만원"
+    - 정보가 없으면 빈 문자열 또는 생략
   - `strengths`: 이 제품의 강점 3~5개
   - `weaknesses`: 이 제품의 약점 2~3개
 - `summary`: 전체 비교 결과 요약 (3~5문장)
@@ -279,6 +284,24 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
   - 배터리 수명: 22시간 → 90점, 20시간 → 85점, 15시간 → 70점
   - 가격: 낮을수록 높은 점수 (가성비 관점)
   - 무게: 가벼울수록 높은 점수 (노트북 기준)
+
+### INSTRUCTION 1-1: EXTRACT SPECIFICATION VALUES
+- **점수와 함께**, 각 기준에 대한 **실제 스펙 값**도 추출합니다.
+- `criteria_specs` 딕셔너리에 다음 형식으로 저장:
+  - 키: 기준 이름 (criteria_scores와 동일)
+  - 값: 제품 정보에서 추출한 실제 값 (간결한 문자열)
+- **추출 규칙**:
+  - 제품 데이터(key_features, price, pros, cons 등)에서 해당 기준과 관련된 구체적인 값을 찾습니다
+  - 숫자와 단위를 포함하여 간결하게 표현합니다
+  - 예시:
+    - "배터리 수명" → "22시간" 또는 "20시간"
+    - "무게" → "1.4kg" 또는 "1.19kg"
+    - "가격" → "2,500,000원" 또는 "180만원"
+    - "RAM 용량" → "16GB DDR5"
+    - "프로세서 성능" → "M3 칩" 또는 "인텔 i7"
+  - 정보를 찾을 수 없으면 빈 문자열("")로 설정
+  - 정성적 기준(예: "디자인")은 간단한 설명 (예: "슬림형 메탈 바디")
+- **중요**: 스펙 값은 사실에 기반해야 하며, 추측하거나 임의로 생성하지 마세요
 
 ### INSTRUCTION 2: OBJECTIVITY
 - **모든 기준을 동등하게** 평가합니다.
@@ -341,6 +364,11 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
         "무게": 75,
         "가격": 45
       },
+      "criteria_specs": {
+        "배터리 수명": "22시간",
+        "무게": "1.4kg",
+        "가격": "2,500,000원"
+      },
       "strengths": [
         "배터리 수명이 22시간으로 매우 길어 장시간 사용에 유리",
         "M3 칩으로 최고 수준의 성능 제공",
@@ -357,6 +385,11 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
         "배터리 수명": 87,
         "무게": 95,
         "가격": 75
+      },
+      "criteria_specs": {
+        "배터리 수명": "20시간",
+        "무게": "1.19kg",
+        "가격": "1,800,000원"
       },
       "strengths": [
         "무게 1.19kg로 매우 가벼워 휴대성이 뛰어남",

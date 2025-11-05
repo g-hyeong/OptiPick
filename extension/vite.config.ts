@@ -4,6 +4,7 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  base: './',
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
@@ -27,10 +28,15 @@ export default defineConfig({
           if (chunkInfo.name === 'background') {
             return 'background.js';
           }
-          return '[name].[hash].js';
+          return 'assets/[name].[hash].js';
         },
-        chunkFileNames: '[name].[hash].js',
-        assetFileNames: '[name].[ext]',
+        chunkFileNames: 'assets/[name].[hash].js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'index.css') {
+            return 'assets/main.css';
+          }
+          return 'assets/[name].[ext]';
+        },
       },
     },
   },

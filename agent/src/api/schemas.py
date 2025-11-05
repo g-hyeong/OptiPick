@@ -76,6 +76,9 @@ class ProductComparisonSchema(BaseModel):
 
     product_name: str = Field(..., description="제품명")
     criteria_scores: dict[str, float] = Field(..., description="각 기준별 점수 (0-100)")
+    criteria_specs: dict[str, str] = Field(
+        default_factory=dict, description="각 기준별 실제 스펙 값 (예: '16GB DDR5', '1.4kg')"
+    )
     strengths: list[str] = Field(default_factory=list, description="강점")
     weaknesses: list[str] = Field(default_factory=list, description="약점")
 

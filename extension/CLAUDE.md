@@ -1,4 +1,4 @@
-# SmartCompare Extension
+# OptiPick Extension
 
 Chrome Extension for extracting web page content (text, images) for LLM analysis.
 

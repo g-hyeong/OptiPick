@@ -1,7 +1,7 @@
 [project]
-name = "smartcompare-agent"
+name = "optipick-agent"
 version = "0.1.0"
-description = "LangGraph-based agent for SmartCompare product analysis"
+description = "LangGraph-based agent for OptiPick product analysis"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.6.8",

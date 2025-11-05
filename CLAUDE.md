@@ -1,4 +1,4 @@
-# SmartCompare Project
+# OptiPick Project
 
 ## 프로젝트 개요
 LLM을 활용하여 특정 군집 내 상품들을 지능적으로 비교 및 분석하는 Chrome Extension 기반 시스템
@@ -37,7 +37,7 @@ Data Pipeline → VectorDB (대규모 write)
 
 ## 프로젝트 구조
 ```
-SmartCompare/
+OptiPick/
 ├── extension/              # Chrome Extension
 ├── api-server/             # Spring Boot API
 ├── agent/                  # LangGraph Agent

@@ -18,14 +18,21 @@ function generateUUID(): string {
  */
 async function getStorageData(): Promise<ProductStorage> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] || { products: [] };
+  // products 키의 값이 배열이면 { products: [...] } 형태로 반환
+  // 객체면 그대로 반환 (하위 호환성)
+  const data = result[STORAGE_KEY];
+  if (Array.isArray(data)) {
+    return { products: data };
+  }
+  return data || { products: [] };
 }
 
 /**
  * Storage에 전체 제품 데이터 저장하기
  */
 async function setStorageData(data: ProductStorage): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEY]: data });
+  // 배열만 저장 (중첩 구조 제거)
+  await chrome.storage.local.set({ [STORAGE_KEY]: data.products });
 }
 
 /**

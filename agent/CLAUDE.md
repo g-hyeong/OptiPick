@@ -1,4 +1,4 @@
-# Agent (SmartCompare)
+# Agent (OptiPick)
 
 ## 개요
 LangGraph 기반 Agent 서버. FastAPI를 통해 REST API를 제공하며, LLM을 활용한 상품 분석 및 비교 워크플로우를 실행합니다.

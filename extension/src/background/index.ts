@@ -374,12 +374,44 @@ async function continueComparisonStep2(
 
     // 3. 최종 리포트 저장
     if (response.status === 'completed' && response.report) {
+      // 3-1. 우선순위 배열 생성 (순서대로)
+      const prioritiesArray = Object.entries(priorities)
+        .sort(([, a], [, b]) => a - b)
+        .map(([criterion]) => criterion);
+
+      // 3-2. ComparisonTask 업데이트
       await updateComparisonTaskState({
         report: response.report,
+        userPriorities: prioritiesArray,
         status: 'completed',
         message: '비교 분석이 완료되었습니다!',
         completedAt: Date.now(),
       });
+
+      // 3-3. analysisHistory에 저장
+      const allProducts = await getProducts();
+      const selectedProducts = allProducts.filter((p) =>
+        currentTask.selectedProductIds.includes(p.id)
+      );
+
+      const historyId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const historyItem = {
+        id: historyId,
+        date: Date.now(),
+        category: currentTask.category,
+        productCount: response.report.total_products,
+        products: selectedProducts,
+        criteria: response.report.user_criteria,
+        userPriorities: prioritiesArray,
+        reportData: response.report,
+      };
+
+      const result = await chrome.storage.local.get('analysisHistory');
+      const currentHistory = result.analysisHistory || [];
+      const updatedHistory = [historyItem, ...currentHistory];
+      await chrome.storage.local.set({ analysisHistory: updatedHistory });
+
+      console.log('[Background] Analysis history saved:', historyId);
 
       // 4. 알림 표시
       await chrome.notifications.create({
@@ -389,8 +421,10 @@ async function continueComparisonStep2(
         message: `${response.report.total_products}개 제품 비교가 완료되었습니다.`,
       });
 
-      // 5. 새 탭에서 비교 리포트 열기
-      const reportUrl = chrome.runtime.getURL('src/compare-report/index.html');
+      // 5. 새 탭에서 비교 리포트 열기 (historyId 전달)
+      const reportUrl = chrome.runtime.getURL(
+        `src/compare-report/index.html?historyId=${historyId}`
+      );
       await chrome.tabs.create({ url: reportUrl });
 
       // 6. 5초 후 작업 상태 초기화
@@ -531,7 +565,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
  * Extension 설치 시
  */
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('SmartCompare Extension installed');
+  console.log('OptiPick Extension installed');
   // 초기 작업 상태 초기화
   saveTaskState(null);
 });

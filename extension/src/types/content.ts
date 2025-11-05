@@ -103,6 +103,7 @@ export interface ProductAnalysisResponse {
 export interface ProductComparison {
   product_name: string;
   criteria_scores: { [criterion: string]: number }; // 0-100 점수
+  criteria_specs: { [criterion: string]: string }; // 실제 스펙 값 (예: "16GB DDR5", "1.4kg")
   strengths: string[];
   weaknesses: string[];
 }
