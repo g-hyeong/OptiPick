@@ -131,7 +131,9 @@ export function ProductsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => window.open(product.url, "_blank")}
+                      onClick={async () => {
+                        await chrome.tabs.create({ url: product.url });
+                      }}
                     >
                       페이지 열기
                     </Button>
@@ -164,7 +166,11 @@ export function ProductsPage() {
           ) : (
             <div className="space-y-2">
               {filteredHistory.map((item) => (
-                <Card key={item.id} hover>
+                <Card
+                  key={item.id}
+                  hover
+                  onClick={() => openComparisonReport(item.id)}
+                >
                   <div className="flex justify-between items-start gap-4">
                     {/* 정보 */}
                     <div className="flex-1 min-w-0">
@@ -205,14 +211,20 @@ export function ProductsPage() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => openComparisonReport(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openComparisonReport(item.id);
+                      }}
                     >
                       결과 보기
                     </Button>
                     <Button
                       variant="danger"
                       size="sm"
-                      onClick={() => deleteHistoryItem(item.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteHistoryItem(item.id);
+                      }}
                     >
                       삭제
                     </Button>

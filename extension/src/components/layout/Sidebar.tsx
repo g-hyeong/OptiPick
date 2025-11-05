@@ -14,9 +14,9 @@ export function Sidebar() {
     setCurrentPage("products");
   };
 
-  const handleHistoryClick = (historyId: string) => {
-    // TODO: 히스토리 상세 페이지로 이동
-    console.log("History clicked:", historyId);
+  const handleHistoryClick = async (historyId: string) => {
+    const url = chrome.runtime.getURL(`src/compare-report/index.html?historyId=${historyId}`);
+    await chrome.tabs.create({ url });
   };
 
   return (
