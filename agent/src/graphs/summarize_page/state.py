@@ -20,6 +20,20 @@ class ExtractedImage(TypedDict, total=False):
     ocr_result: str  # OCR로 추출된 텍스트 (optional)
 
 
+class ParsedContent(TypedDict, total=False):
+    """파싱된 콘텐츠 (도메인별로 다른 구조)"""
+    domain_type: str  # "naver_brand" | "naver_smartstore" | "coupang" | "generic"
+
+    # 도메인 특화 파서 (구조화된 데이터)
+    product_name: str  # 제품명
+    price: str  # 가격
+    description_texts: list[str]  # 텍스트 설명/특징 배열
+    description_images: list[ExtractedImage]  # 이미지 설명 배열
+
+    # generic 파서 (원본 데이터)
+    texts: list[ExtractedText]
+
+
 class ProductAnalysis(TypedDict):
     """제품 분석 결과"""
     product_name: str  # 제품명
@@ -38,9 +52,16 @@ class SummarizePageState(TypedDict):
     # Extension으로부터 받는 입력
     url: str
     title: str
-    texts: list[ExtractedText]
+    raw_texts: list[ExtractedText]  # texts → raw_texts로 변경
     images: list[ExtractedImage]
     timestamp: int
+
+    # 페이지 검증 결과
+    is_valid_page: bool
+    validation_error: str
+
+    # 도메인별 파싱 결과
+    parsed_content: ParsedContent
 
     # 필터링된 유효한 이미지들
     valid_images: list[ExtractedImage]

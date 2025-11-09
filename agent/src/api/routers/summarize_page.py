@@ -41,11 +41,11 @@ async def execute_summarize_page(request: SummarizePageRequest):
             },
         )
 
-        # Request → State 변환
+        # Request → State 변환 (texts → raw_texts)
         state_input = {
             "url": request.url,
             "title": request.title,
-            "texts": [text.model_dump() for text in request.texts],
+            "raw_texts": [text.model_dump() for text in request.texts],
             "images": [image.model_dump() for image in request.images],
             "timestamp": request.timestamp,
         }
@@ -53,6 +53,25 @@ async def execute_summarize_page(request: SummarizePageRequest):
         # 그래프 실행
         graph = create_graph()
         result = await graph.ainvoke(state_input)
+
+        # 페이지 검증 실패 시 에러 응답
+        if not result.get("is_valid_page", False):
+            validation_error = result.get("validation_error", "페이지 검증에 실패했습니다")
+            logger.warning(
+                "Page validation failed",
+                extra={
+                    "url": request.url,
+                    "error": validation_error,
+                },
+            )
+            return SummarizePageResponse(
+                url=result["url"],
+                title=result["title"],
+                error=validation_error,
+                valid_images=[],
+                product_analysis=None,
+                timestamp=result["timestamp"],
+            )
 
         # 실행 결과 상세 로깅
         valid_images = result.get("valid_images", [])

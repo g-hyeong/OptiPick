@@ -105,21 +105,65 @@ def create_default_analysis() -> ProductAnalysis:
 async def analyze_product_node(state: SummarizePageState) -> dict:
     """텍스트와 이미지 정보를 분석하여 제품 분석 결과를 생성하는 노드"""
     try:
-        texts = state["texts"]
+        parsed_content = state["parsed_content"]
         valid_images = state["valid_images"]
+        domain_type = parsed_content.get("domain_type", "generic")
 
         logger.info(f"━━━ Analyze Product Node ━━━")
-        logger.info(f"  Input: {len(texts)} texts, {len(valid_images)} images")
+        logger.info(f"  Domain Type: {domain_type}")
+
+        # 1. parsed_content에서 텍스트 추출
+        if domain_type == "generic":
+            # Generic 파서: texts 필드 사용
+            texts = parsed_content.get("texts", [])
+            logger.info(f"  Input (Generic): {len(texts)} texts, {len(valid_images)} images")
+        else:
+            # 도메인 특화 파서: 구조화된 데이터를 ExtractedText 형태로 변환
+            texts = []
+
+            # 제품명 추가 (h1 태그로)
+            product_name = parsed_content.get("product_name", "")
+            if product_name and product_name != "TODO":
+                texts.append(
+                    {"content": f"제품명: {product_name}", "tagName": "h1", "position": 0}
+                )
+
+            # 가격 추가 (h2 태그로)
+            price = parsed_content.get("price", "")
+            if price and price != "TODO":
+                texts.append({"content": f"가격: {price}", "tagName": "h2", "position": 100})
+
+            # 텍스트 설명/특징 추가 (일반 텍스트로)
+            description_texts = parsed_content.get("description_texts", [])
+            for idx, desc_text in enumerate(description_texts):
+                if desc_text and desc_text != "TODO":
+                    texts.append(
+                        {
+                            "content": desc_text,
+                            "tagName": "",
+                            "position": 200 + idx * 100,
+                        }
+                    )
+
+            # 이미지 설명을 valid_images에 추가
+            description_images = parsed_content.get("description_images", [])
+            if description_images:
+                valid_images = list(valid_images) + description_images
+
+            logger.info(
+                f"  Input (Domain-specific): {len(texts)} structured texts, "
+                f"{len(valid_images)} images (including {len(description_images)} description images)"
+            )
 
         # 입력 데이터 검증
         if not texts and not valid_images:
             logger.warning("  No data available, returning default analysis")
             return {"product_analysis": create_default_analysis()}
 
-        # 1. 프롬프트 구성
+        # 2. 프롬프트 구성
         messages = analyze_product.build_messages(texts, valid_images)
 
-        # 2. LLM 호출 (structured output)
+        # 3. LLM 호출 (structured output)
         llm_client = LLMClient(
             provider=settings.default_llm_provider,
             model=settings.default_llm_model,
@@ -133,7 +177,7 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
             output_format=ProductAnalysisOutput,
         )
 
-        # 3. Pydantic 모델을 TypedDict로 변환
+        # 4. Pydantic 모델을 TypedDict로 변환
         product_analysis: ProductAnalysis = {
             "product_name": result.product_name,
             "summary": result.summary,

@@ -1,5 +1,6 @@
 """API Request/Response Pydantic 스키마"""
 
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -59,11 +60,12 @@ class SummarizePageResponse(BaseModel):
 
     url: str = Field(..., description="페이지 URL")
     title: str = Field(..., description="페이지 제목")
+    error: Optional[str] = Field(None, description="에러 메시지 (검증 실패 시)")
     valid_images: list[ExtractedImageSchema] = Field(
         default_factory=list, description="유효한 이미지 목록 (OCR 결과 포함)"
     )
-    product_analysis: ProductAnalysisSchema = Field(
-        ..., description="제품 분석 결과"
+    product_analysis: Optional[ProductAnalysisSchema] = Field(
+        None, description="제품 분석 결과 (검증 실패 시 None)"
     )
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
 
