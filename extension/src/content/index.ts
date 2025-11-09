@@ -1,4 +1,4 @@
-import type { ExtractedContent, ParserOptions } from '@/types/content';
+import type { ExtractedContent } from '@/types/content';
 import { extractPageContent } from './parsers';
 
 /**
@@ -25,7 +25,7 @@ function handleMessage(
   try {
     switch (message.type) {
       case 'EXTRACT_CONTENT':
-        handleExtractContent(message.options, sendResponse);
+        handleExtractContent(sendResponse);
         break;
 
       case 'PING':
@@ -48,16 +48,14 @@ function handleMessage(
  * 콘텐츠 추출 처리
  */
 function handleExtractContent(
-  options: ParserOptions | undefined,
   sendResponse: (response: any) => void
 ): void {
   try {
-    const content: ExtractedContent = extractPageContent(options);
+    const content: ExtractedContent = extractPageContent();
 
     console.log('Extracted content:', {
       url: content.url,
-      textsCount: content.texts.length,
-      imagesCount: content.images.length,
+      htmlBodyLength: content.html_body.length,
     });
 
     sendResponse({

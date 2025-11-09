@@ -2,6 +2,7 @@
 
 from src.exceptions.base import ConfigurationError
 from src.services.ocr import get_ocr_service
+from src.utils.html_parser import HTMLContentExtractor
 from src.utils.logger import get_logger
 
 from ..config import SummarizePageSettings
@@ -12,11 +13,18 @@ settings = SummarizePageSettings()
 
 
 async def ocr_node(state: SummarizePageState) -> dict:
-    """이미지 리스트를 받아 OCR 수행하는 노드"""
+    """HTML에서 이미지를 추출하고 OCR 수행하는 노드"""
     try:
-        images = state["images"]
+        # HTML에서 이미지 추출
+        html_body = state["html_body"]
+        url = state["url"]
+        images = HTMLContentExtractor.extract_images(
+            html_body=html_body, base_url=url
+        )
+
         logger.info(f"━━━ OCR Node ━━━")
-        logger.info(f"  Input: {len(images)} images")
+        logger.info(f"  HTML body length: {len(html_body)} chars")
+        logger.info(f"  Extracted: {len(images)} images")
 
         # OCR 서비스 팩토리를 사용하여 적절한 서비스 인스턴스 생성
         ocr_service = get_ocr_service(settings)
@@ -47,6 +55,6 @@ async def ocr_node(state: SummarizePageState) -> dict:
         raise
 
     except Exception as e:
-        # 예상치 못한 오류는 로깅 후 원본 이미지 반환
+        # 예상치 못한 오류는 로깅 후 빈 이미지 반환
         logger.error(f"Unexpected error in OCR node: {str(e)}")
-        return {"images": state["images"]}
+        return {"images": []}

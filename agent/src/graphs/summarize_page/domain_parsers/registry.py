@@ -65,10 +65,14 @@ def _register_all_parsers(registry: ParserRegistry):
     Args:
         registry: 파서를 등록할 레지스트리
     """
-    from .naver_brand import NaverBrandParser
-    from .naver_smartstore import NaverSmartstoreParser
-    from .coupang_product import CoupangProductParser
+    # TODO: 도메인 특화 파서들이 구현되면 주석 해제
+    # from .naver_brand import NaverBrandParser
+    # from .naver_smartstore import NaverSmartstoreParser
+    # from .coupang_product import CoupangProductParser
 
-    registry.register(NaverBrandParser())
-    registry.register(NaverSmartstoreParser())
-    registry.register(CoupangProductParser())
+    # registry.register(NaverBrandParser())
+    # registry.register(NaverSmartstoreParser())
+    # registry.register(CoupangProductParser())
+
+    # 현재는 모든 URL을 Generic Parser로 처리
+    pass

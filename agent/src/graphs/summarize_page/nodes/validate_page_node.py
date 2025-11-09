@@ -6,6 +6,7 @@ from src.config.base import BaseSettings
 from src.prompts import validate_page
 from src.utils.llm.client import LLMClient
 from src.utils.logger import get_logger
+from src.utils.html_parser import HTMLContentExtractor
 
 from ..state import SummarizePageState
 
@@ -43,14 +44,23 @@ async def validate_page_node(state: SummarizePageState) -> dict:
     try:
         url = state["url"]
         title = state["title"]
-        raw_texts = state["raw_texts"]
+        html_body = state["html_body"]
 
         logger.info(f"━━━ Validate Page Node ━━━")
         logger.info(f"  URL: {url}")
-        logger.info(f"  Input: {len(raw_texts)} texts")
+        logger.info(f"  HTML body length: {len(html_body)} chars")
+
+        # HTML에서 텍스트 추출
+        texts = HTMLContentExtractor.extract_texts(
+            html_body=html_body,
+            min_length=10,
+            base_url=url
+        )
+
+        logger.info(f"  Extracted: {len(texts)} texts")
 
         # 입력 데이터 검증
-        if not raw_texts:
+        if not texts:
             logger.warning("  No text data available, marking as invalid")
             return {
                 "is_valid_page": False,
@@ -58,7 +68,7 @@ async def validate_page_node(state: SummarizePageState) -> dict:
             }
 
         # 1. 프롬프트 구성
-        messages = validate_page.build_messages(url, title, raw_texts)
+        messages = validate_page.build_messages(url, title, texts)
 
         # 2. LLM 호출 (structured output)
         llm_client = LLMClient(
