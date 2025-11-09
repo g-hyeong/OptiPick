@@ -26,8 +26,7 @@ class BaseDomainParser(ABC):
         self,
         url: str,
         title: str,
-        texts: list[ExtractedText],
-        images: list[ExtractedImage],
+        html_body: str,
     ) -> ParsedContent:
         """
         페이지 파싱 로직 실행
@@ -35,8 +34,7 @@ class BaseDomainParser(ABC):
         Args:
             url: 페이지 URL
             title: 페이지 제목
-            texts: Extension에서 추출한 텍스트 목록
-            images: Extension에서 추출한 이미지 목록
+            html_body: 정제된 HTML body
 
         Returns:
             ParsedContent: 파싱 결과

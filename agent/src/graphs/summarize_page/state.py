@@ -52,8 +52,7 @@ class SummarizePageState(TypedDict):
     # Extension으로부터 받는 입력
     url: str
     title: str
-    raw_texts: list[ExtractedText]  # texts → raw_texts로 변경
-    images: list[ExtractedImage]
+    html_body: str  # 정제된 HTML body
     timestamp: int
 
     # 페이지 검증 결과

@@ -111,10 +111,6 @@ async function extractContentFromTab(
 
   const response = await chrome.tabs.sendMessage(tabId, {
     type: 'EXTRACT_CONTENT',
-    options: {
-      minTextLength: 10,
-      minImageSize: { width: 100, height: 100 },
-    },
   });
 
   if (!response.success) {

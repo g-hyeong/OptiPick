@@ -26,10 +26,8 @@ export interface ExtractedContent {
   url: string;
   /** 페이지 제목 */
   title: string;
-  /** 추출된 텍스트 목록 */
-  texts: ExtractedText[];
-  /** 추출된 이미지 목록 */
-  images: ExtractedImage[];
+  /** 정제된 HTML body */
+  html_body: string;
   /** 추출 시점 */
   timestamp: number;
 }
@@ -57,9 +55,8 @@ export interface ParserOptions {
 export interface ProductAnalysisRequest {
   url: string;
   title: string;
+  html_body: string;
   timestamp: number;
-  texts: ExtractedText[];
-  images: ExtractedImage[];
 }
 
 /**

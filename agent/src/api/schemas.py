@@ -46,12 +46,7 @@ class SummarizePageRequest(BaseModel):
 
     url: str = Field(..., description="페이지 URL")
     title: str = Field(..., description="페이지 제목")
-    texts: list[ExtractedTextSchema] = Field(
-        default_factory=list, description="추출된 텍스트 목록"
-    )
-    images: list[ExtractedImageSchema] = Field(
-        default_factory=list, description="추출된 이미지 목록"
-    )
+    html_body: str = Field(..., description="정제된 HTML body")
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
 
 

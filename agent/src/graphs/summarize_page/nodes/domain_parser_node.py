@@ -21,22 +21,21 @@ async def domain_parser_node(state: SummarizePageState) -> dict:
     try:
         url = state["url"]
         title = state["title"]
-        raw_texts = state["raw_texts"]
-        images = state["images"]
+        html_body = state["html_body"]
 
         logger.info(f"━━━ Domain Parser Node ━━━")
         logger.info(f"  URL: {url}")
+        logger.info(f"  HTML body length: {len(html_body)} chars")
 
         # 1. 파서 레지스트리에서 적절한 파서 선택
         registry = get_parser_registry()
         parser = registry.get_parser(url)
 
         logger.info(f"  Selected Parser: {parser.domain_type}")
-        logger.info(f"  Input: {len(raw_texts)} texts, {len(images)} images")
 
         # 2. 파서 실행
         parsed_content: ParsedContent = parser.parse(
-            url=url, title=title, texts=raw_texts, images=images
+            url=url, title=title, html_body=html_body
         )
 
         logger.info(f"  Output: domain_type={parsed_content.get('domain_type')}")
@@ -48,7 +47,7 @@ async def domain_parser_node(state: SummarizePageState) -> dict:
             logger.info(f"    Product Name: {parsed_content.get('product_name', 'N/A')}")
             logger.info(f"    Price: {parsed_content.get('price', 'N/A')}")
             logger.info(
-                f"    Specifications: {len(parsed_content.get('specifications', {}))} items"
+                f"    Description texts: {len(parsed_content.get('description_texts', []))} items"
             )
 
         return {"parsed_content": parsed_content}

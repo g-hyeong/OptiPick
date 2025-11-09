@@ -36,17 +36,15 @@ async def execute_summarize_page(request: SummarizePageRequest):
             extra={
                 "url": request.url,
                 "title": request.title,
-                "text_count": len(request.texts),
-                "image_count": len(request.images),
+                "html_body_length": len(request.html_body),
             },
         )
 
-        # Request → State 변환 (texts → raw_texts)
+        # Request → State 변환
         state_input = {
             "url": request.url,
             "title": request.title,
-            "raw_texts": [text.model_dump() for text in request.texts],
-            "images": [image.model_dump() for image in request.images],
+            "html_body": request.html_body,
             "timestamp": request.timestamp,
         }
 
@@ -81,11 +79,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
         logger.debug(
             "Valid images after filtering",
             extra={
-                "total_images": len(request.images),
                 "valid_images_count": len(valid_images),
-                "filter_rate": f"{len(valid_images) / len(request.images) * 100:.1f}%"
-                if request.images
-                else "N/A",
             },
         )
 

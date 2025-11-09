@@ -19,32 +19,31 @@ class CoupangProductParser(BaseDomainParser):
         self,
         url: str,
         title: str,
-        texts: list[ExtractedText],
-        images: list[ExtractedImage],
+        html_body: str,
     ) -> ParsedContent:
         """
         쿠팡 상품 페이지 파싱
 
         TODO: 실제 파싱 로직 구현 필요
-        - extractors.py의 헬퍼 함수들을 사용하여 구현
+        - BeautifulSoup으로 HTML 파싱
+        - CSS 선택자를 사용하여 쿠팡 특화 정보 추출
         - 제품명, 가격, 텍스트 설명/특징, 이미지 설명 추출
 
         Args:
             url: 페이지 URL
             title: 페이지 제목
-            texts: Extension에서 추출한 텍스트 목록
-            images: Extension에서 추출한 이미지 목록
+            html_body: 정제된 HTML body
 
         Returns:
             ParsedContent: 파싱 결과
         """
         # TODO: 실제 파싱 로직 구현
-        # from .extractors import (
-        #     extract_product_name,
-        #     extract_price,
-        #     extract_description_texts,
-        #     extract_description_images,
-        # )
+        # from bs4 import BeautifulSoup
+        # soup = BeautifulSoup(html_body, 'lxml')
+        #
+        # product_name = soup.select_one('.prod-buy-header__title').get_text() if soup.select_one('.prod-buy-header__title') else "TODO"
+        # price = soup.select_one('.total-price').get_text() if soup.select_one('.total-price') else "TODO"
+        # ...
 
         return ParsedContent(
             domain_type=self.domain_type,
