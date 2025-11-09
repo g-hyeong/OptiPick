@@ -96,11 +96,11 @@ async def validate_page_node(state: SummarizePageState) -> dict:
             ExtractedImage(
                 src=img.src,
                 alt=img.alt,
-                width=img.width,
-                height=img.height,
-                position=img.position,
+                width=0,  # LLM 출력에는 없음, 기본값 사용
+                height=0,
+                position=idx,  # 배열 순서를 position으로 사용
             )
-            for img in result.description_images
+            for idx, img in enumerate(result.description_images)
         ]
 
         parsed_content = ParsedContent(

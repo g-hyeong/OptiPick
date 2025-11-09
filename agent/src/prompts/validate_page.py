@@ -3,9 +3,9 @@
 LLM을 사용하여 웹 페이지가 제품 분석에 적합한지 검증하기 위한 프롬프트
 """
 
-from typing import List
+from typing import Any, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..graphs.summarize_page.state import ExtractedImage, ExtractedText
 
@@ -24,13 +24,16 @@ class ExtractedTextOutput(BaseModel):
 
 
 class ExtractedImageOutput(BaseModel):
-    """추출된 이미지 (LLM 출력용)"""
+    """추출된 이미지 (LLM 출력용) - 간소화 버전"""
 
     src: str = Field(..., description="이미지 URL (절대 경로)")
-    alt: str = Field(default="", description="대체 텍스트")
-    width: float = Field(..., description="너비 (픽셀)")
-    height: float = Field(..., description="높이 (픽셀)")
-    position: float = Field(..., description="페이지 상단으로부터의 순서")
+    alt: str = Field(default="", description="대체 텍스트 (없으면 빈 문자열)")
+
+    @field_validator("alt", mode="before")
+    @classmethod
+    def validate_alt(cls, v: Any) -> str:
+        """None을 빈 문자열로 변환"""
+        return v if v is not None else ""
 
 
 class ValidationResult(BaseModel):
@@ -45,9 +48,11 @@ class ValidationResult(BaseModel):
 
     # 유효한 경우에만 채워지는 필드들
     product_name: str = Field(
-        default="", description="메인 제품명 (유효한 경우에만, h1 태그 우선)"
+        default="", description="메인 제품명 (유효한 경우에만, h1 태그 우선, 없으면 빈 문자열)"
     )
-    price: str = Field(default="", description="가격 정보 (유효한 경우에만)")
+    price: str = Field(
+        default="", description="가격 정보 (유효한 경우에만, 없으면 빈 문자열)"
+    )
     description_texts: List[ExtractedTextOutput] = Field(
         default_factory=list,
         description="메인 제품의 텍스트 설명 (유효한 경우에만, 추천 상품 제외)",
@@ -56,6 +61,12 @@ class ValidationResult(BaseModel):
         default_factory=list,
         description="메인 제품의 이미지 (유효한 경우에만, 배제 최소화)",
     )
+
+    @field_validator("error_message", "product_name", "price", mode="before")
+    @classmethod
+    def validate_str_fields(cls, v: Any) -> str:
+        """None을 빈 문자열로 변환"""
+        return v if v is not None else ""
 
 
 # ============================================================================
@@ -93,7 +104,7 @@ SYSTEM_PROMPT = """
     {"content": "string", "tagName": "string", "position": number}
   ],
   "description_images": [
-    {"src": "string", "alt": "string", "width": number, "height": number, "position": number}
+    {"src": "string", "alt": "string"}
   ]
 }
 ```
@@ -175,7 +186,7 @@ SYSTEM_PROMPT = """
   - **배제 최소화**: 메인 제품과 관련 가능성이 있으면 모두 포함
   - 제품 사진, 스펙 테이블 이미지, 사용 예시 이미지 모두 포함
   - UI 요소(로고, 아이콘), 광고 배너만 제외
-  - alt, width, height, position 정보 유지
+  - src(이미지 URL)와 alt(대체 텍스트)만 포함
 
 ### INSTRUCTION 6: 부적합한 경우 처리
 - `is_valid: false`인 경우:
@@ -247,19 +258,14 @@ def build_messages(
 
     page_text = "\n".join(text_contents)
 
-    # 이미지 정보 구성
+    # 이미지 정보 구성 (src, alt만 포함)
     sorted_images = sorted(images, key=lambda img: img.get("position", 0))
     image_contents = []
     for i, img in enumerate(sorted_images):
         src = img.get("src", "")
         alt = img.get("alt", "")
-        width = img.get("width", 0)
-        height = img.get("height", 0)
-        position = img.get("position", 0)
 
-        image_contents.append(
-            f"Image {i+1}: src={src}, alt={alt}, width={width}, height={height}, position={position}"
-        )
+        image_contents.append(f"Image {i+1}: src={src}, alt={alt}")
 
     page_images = "\n".join(image_contents) if image_contents else "(이미지 없음)"
 
