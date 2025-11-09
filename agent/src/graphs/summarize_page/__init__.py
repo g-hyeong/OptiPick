@@ -1,19 +1,40 @@
 """SummarizePage 그래프 - 페이지 콘텐츠 요약 워크플로우"""
 
-from langgraph.graph import StateGraph, END
-from .state import SummarizePageState
+from langgraph.graph import END, StateGraph
+
+from .domain_parsers import get_parser_registry
 from .nodes import (
-    validate_page_node,
+    analyze_product_node,
     domain_parser_node,
     ocr_node,
-    filter_images_node,
-    analyze_product_node,
+    validate_page_node,
 )
+from .state import SummarizePageState
 
 
-def should_continue_after_validation(state: SummarizePageState) -> str:
+def route_by_domain(state: SummarizePageState) -> str:
     """
-    페이지 검증 후 워크플로우 계속 여부 결정
+    URL을 기반으로 도메인 체크하여 라우팅
+
+    Args:
+        state: SummarizePageState
+
+    Returns:
+        str: "domain_specific" 또는 "generic"
+    """
+    url = state.get("url", "")
+    registry = get_parser_registry()
+    parser = registry.get_parser(url)
+
+    # generic 파서가 아니면 도메인 특화 파서 사용
+    if parser.domain_type != "generic":
+        return "domain_specific"
+    return "generic"
+
+
+def should_continue_after_parsing(state: SummarizePageState) -> str:
+    """
+    파싱(validation 또는 domain_parser) 후 워크플로우 계속 여부 결정
 
     Args:
         state: SummarizePageState
@@ -26,19 +47,25 @@ def should_continue_after_validation(state: SummarizePageState) -> str:
     return "continue"
 
 
+def route_node(state: SummarizePageState) -> dict:
+    """라우팅 전용 노드 - state를 변경하지 않음"""
+    return {}
+
+
 def create_graph() -> StateGraph:
     """
     SummarizePage 그래프 생성
 
     워크플로우:
-    1. START -> validate_page: 페이지 적합성 검증
-    2. validate_page -> (조건부)
-        - 검증 실패 시 -> END (에러 메시지 포함)
-        - 검증 성공 시 -> domain_parser
-    3. domain_parser -> ocr: 도메인별 콘텐츠 파싱
-    4. ocr -> filter_images: 이미지에서 텍스트 추출
-    5. filter_images -> analyze_product: LLM으로 유용한 이미지 필터링
-    6. analyze_product -> END: 제품 정보 분석
+    1. START -> route: 도메인 체크
+    2. route -> (조건부 분기)
+        - 특정 도메인 (쿠팡, 네이버 등) -> domain_parser (검증 + 파싱)
+        - 일반 페이지 -> validation (검증 + 파싱)
+    3. domain_parser/validation -> (조건부)
+        - 검증 실패 -> END
+        - 검증 성공 -> ocr
+    4. ocr -> analyze_product: 이미지 OCR 수행
+    5. analyze_product -> END: 제품 정보 분석
 
     Returns:
         StateGraph: 컴파일된 그래프
@@ -47,29 +74,47 @@ def create_graph() -> StateGraph:
     workflow = StateGraph(SummarizePageState)
 
     # 노드 추가
+    workflow.add_node("route", route_node)
     workflow.add_node("validate_page", validate_page_node)
     workflow.add_node("domain_parser", domain_parser_node)
     workflow.add_node("ocr", ocr_node)
-    workflow.add_node("filter_images", filter_images_node)
     workflow.add_node("analyze_product", analyze_product_node)
 
     # 엣지 정의
-    workflow.set_entry_point("validate_page")
+    workflow.set_entry_point("route")
 
-    # 조건부 엣지: 검증 결과에 따라 분기
+    # 1. 도메인 기반 라우팅
+    workflow.add_conditional_edges(
+        "route",
+        route_by_domain,
+        {
+            "domain_specific": "domain_parser",
+            "generic": "validate_page",
+        },
+    )
+
+    # 2. validation 후 조건부 분기
     workflow.add_conditional_edges(
         "validate_page",
-        should_continue_after_validation,
+        should_continue_after_parsing,
         {
-            "continue": "domain_parser",
+            "continue": "ocr",
             "end": END,
         },
     )
 
-    # 일반 엣지
-    workflow.add_edge("domain_parser", "ocr")
-    workflow.add_edge("ocr", "filter_images")
-    workflow.add_edge("filter_images", "analyze_product")
+    # 3. domain_parser 후 조건부 분기
+    workflow.add_conditional_edges(
+        "domain_parser",
+        should_continue_after_parsing,
+        {
+            "continue": "ocr",
+            "end": END,
+        },
+    )
+
+    # 4. 일반 엣지
+    workflow.add_edge("ocr", "analyze_product")
     workflow.add_edge("analyze_product", END)
 
     # 그래프 컴파일

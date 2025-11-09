@@ -13,18 +13,18 @@ settings = SummarizePageSettings()
 
 
 async def ocr_node(state: SummarizePageState) -> dict:
-    """HTML에서 이미지를 추출하고 OCR 수행하는 노드"""
+    """parsed_content의 이미지에 OCR 수행하는 노드"""
     try:
-        # HTML에서 이미지 추출
-        html_body = state["html_body"]
-        url = state["url"]
-        images = HTMLContentExtractor.extract_images(
-            html_body=html_body, base_url=url
-        )
+        # parsed_content에서 이미지 가져오기
+        parsed_content = state.get("parsed_content", {})
+        images = list(parsed_content.get("description_images", []))
 
         logger.info(f"━━━ OCR Node ━━━")
-        logger.info(f"  HTML body length: {len(html_body)} chars")
-        logger.info(f"  Extracted: {len(images)} images")
+        logger.info(f"  Input: {len(images)} images from parsed_content")
+
+        if not images:
+            logger.info("  No images to process, skipping OCR")
+            return {"images": []}
 
         # OCR 서비스 팩토리를 사용하여 적절한 서비스 인스턴스 생성
         ocr_service = get_ocr_service(settings)

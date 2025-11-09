@@ -106,7 +106,7 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
     """텍스트와 이미지 정보를 분석하여 제품 분석 결과를 생성하는 노드"""
     try:
         parsed_content = state["parsed_content"]
-        valid_images = state["valid_images"]
+        images = state.get("images", [])  # OCR 결과가 포함된 이미지
         domain_type = parsed_content.get("domain_type", "generic")
 
         logger.info(f"━━━ Analyze Product Node ━━━")
@@ -116,7 +116,7 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
         if domain_type == "generic":
             # Generic 파서: texts 필드 사용
             texts = parsed_content.get("texts", [])
-            logger.info(f"  Input (Generic): {len(texts)} texts, {len(valid_images)} images")
+            logger.info(f"  Input (Generic): {len(texts)} texts, {len(images)} images")
         else:
             # 도메인 특화 파서: 구조화된 데이터를 ExtractedText 형태로 변환
             texts = []
@@ -133,35 +133,25 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
             if price and price != "TODO":
                 texts.append({"content": f"가격: {price}", "tagName": "h2", "position": 100})
 
-            # 텍스트 설명/특징 추가 (일반 텍스트로)
+            # 텍스트 설명/특징 추가
+            # description_texts는 이제 list[ExtractedText] 형식
             description_texts = parsed_content.get("description_texts", [])
-            for idx, desc_text in enumerate(description_texts):
-                if desc_text and desc_text != "TODO":
-                    texts.append(
-                        {
-                            "content": desc_text,
-                            "tagName": "",
-                            "position": 200 + idx * 100,
-                        }
-                    )
+            texts.extend(description_texts)
 
-            # 이미지 설명을 valid_images에 추가
-            description_images = parsed_content.get("description_images", [])
-            if description_images:
-                valid_images = list(valid_images) + description_images
+            # 도메인 특화 파서의 경우 images는 이미 OCR이 수행된 상태
+            # parsed_content의 description_images와 state의 images는 동일
 
             logger.info(
-                f"  Input (Domain-specific): {len(texts)} structured texts, "
-                f"{len(valid_images)} images (including {len(description_images)} description images)"
+                f"  Input (Domain-specific): {len(texts)} structured texts, {len(images)} images"
             )
 
         # 입력 데이터 검증
-        if not texts and not valid_images:
+        if not texts and not images:
             logger.warning("  No data available, returning default analysis")
             return {"product_analysis": create_default_analysis()}
 
         # 2. 프롬프트 구성
-        messages = analyze_product.build_messages(texts, valid_images)
+        messages = analyze_product.build_messages(texts, images)
 
         # 3. LLM 호출 (structured output)
         llm_client = LLMClient(

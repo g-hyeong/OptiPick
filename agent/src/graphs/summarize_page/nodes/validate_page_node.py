@@ -1,45 +1,27 @@
-"""페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증"""
-
-from pydantic import BaseModel, Field
+"""페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보 추출"""
 
 from src.config.base import BaseSettings
 from src.prompts import validate_page
+from src.prompts.validate_page import ValidationResult
+from src.utils.html_parser import HTMLContentExtractor
 from src.utils.llm.client import LLMClient
 from src.utils.logger import get_logger
-from src.utils.html_parser import HTMLContentExtractor
 
-from ..state import SummarizePageState
+from ..state import ExtractedImage, ExtractedText, ParsedContent, SummarizePageState
 
 logger = get_logger(__name__)
 settings = BaseSettings()
 
 
-class PageValidationOutput(BaseModel):
-    """LLM 출력 - 페이지 검증 결과"""
-
-    is_valid: bool = Field(
-        description="페이지가 단일 제품 상세 페이지이면 true, 아니면 false",
-        examples=[True, False],
-    )
-    error_message: str = Field(
-        description='부적합한 페이지일 경우 사용자에게 전달할 에러 메시지 (한국어). 적합하면 빈 문자열 ""',
-        examples=[
-            "",
-            "여러 제품이 나열된 페이지입니다. 특정 제품을 선택해주세요",
-            "제품 정보를 찾을 수 없습니다",
-        ],
-    )
-
-
 async def validate_page_node(state: SummarizePageState) -> dict:
     """
-    페이지가 제품 분석에 적합한지 검증하는 노드
+    페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보를 추출하는 노드
 
     Args:
         state: SummarizePageState
 
     Returns:
-        dict: is_valid_page, validation_error 업데이트
+        dict: is_valid_page, validation_error, parsed_content 업데이트
     """
     try:
         url = state["url"]
@@ -50,14 +32,13 @@ async def validate_page_node(state: SummarizePageState) -> dict:
         logger.info(f"  URL: {url}")
         logger.info(f"  HTML body length: {len(html_body)} chars")
 
-        # HTML에서 텍스트 추출
+        # HTML에서 텍스트와 이미지 추출
         texts = HTMLContentExtractor.extract_texts(
-            html_body=html_body,
-            min_length=10,
-            base_url=url
+            html_body=html_body, min_length=10, base_url=url
         )
+        images = HTMLContentExtractor.extract_images(html_body=html_body, base_url=url)
 
-        logger.info(f"  Extracted: {len(texts)} texts")
+        logger.info(f"  Extracted: {len(texts)} texts, {len(images)} images")
 
         # 입력 데이터 검증
         if not texts:
@@ -68,7 +49,7 @@ async def validate_page_node(state: SummarizePageState) -> dict:
             }
 
         # 1. 프롬프트 구성
-        messages = validate_page.build_messages(url, title, texts)
+        messages = validate_page.build_messages(url, title, texts, images)
 
         # 2. LLM 호출 (structured output)
         llm_client = LLMClient(
@@ -79,18 +60,61 @@ async def validate_page_node(state: SummarizePageState) -> dict:
             timeout=settings.default_llm_timeout,
         )
 
-        result: PageValidationOutput = await llm_client.invoke(
+        result: ValidationResult = await llm_client.invoke(
             messages=messages,
-            output_format=PageValidationOutput,
+            output_format=ValidationResult,
         )
 
-        logger.info(f"  Validation Result: {'✓ Valid' if result.is_valid else '✗ Invalid'}")
+        logger.info(
+            f"  Validation Result: {'✓ Valid' if result.is_valid else '✗ Invalid'}"
+        )
         if not result.is_valid:
             logger.info(f"  Error Message: {result.error_message}")
+            return {
+                "is_valid_page": False,
+                "validation_error": result.error_message,
+            }
+
+        # 유효한 경우: ValidationResult → ParsedContent 변환
+        logger.info(f"  Product Name: {result.product_name}")
+        logger.info(f"  Price: {result.price}")
+        logger.info(
+            f"  Extracted: {len(result.description_texts)} texts, {len(result.description_images)} images"
+        )
+
+        # Pydantic 모델 → TypedDict 변환
+        parsed_texts: list[ExtractedText] = [
+            ExtractedText(
+                content=text.content,
+                tagName=text.tagName,
+                position=text.position,
+            )
+            for text in result.description_texts
+        ]
+
+        parsed_images: list[ExtractedImage] = [
+            ExtractedImage(
+                src=img.src,
+                alt=img.alt,
+                width=img.width,
+                height=img.height,
+                position=img.position,
+            )
+            for img in result.description_images
+        ]
+
+        parsed_content = ParsedContent(
+            domain_type="generic",
+            product_name=result.product_name,
+            price=result.price,
+            description_texts=parsed_texts,
+            description_images=parsed_images,
+        )
 
         return {
-            "is_valid_page": result.is_valid,
-            "validation_error": result.error_message if not result.is_valid else "",
+            "is_valid_page": True,
+            "validation_error": "",
+            "parsed_content": parsed_content,
         }
 
     except Exception as e:

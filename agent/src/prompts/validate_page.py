@@ -5,7 +5,57 @@ LLM을 사용하여 웹 페이지가 제품 분석에 적합한지 검증하기 
 
 from typing import List
 
-from ..graphs.summarize_page.state import ExtractedText
+from pydantic import BaseModel, Field
+
+from ..graphs.summarize_page.state import ExtractedImage, ExtractedText
+
+
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+
+class ExtractedTextOutput(BaseModel):
+    """추출된 텍스트 (LLM 출력용)"""
+
+    content: str = Field(..., description="텍스트 내용")
+    tagName: str = Field(..., description="HTML 태그명 (h1, h2, h3, p, span 등)")
+    position: float = Field(..., description="페이지 상단으로부터의 순서 (작을수록 상단)")
+
+
+class ExtractedImageOutput(BaseModel):
+    """추출된 이미지 (LLM 출력용)"""
+
+    src: str = Field(..., description="이미지 URL (절대 경로)")
+    alt: str = Field(default="", description="대체 텍스트")
+    width: float = Field(..., description="너비 (픽셀)")
+    height: float = Field(..., description="높이 (픽셀)")
+    position: float = Field(..., description="페이지 상단으로부터의 순서")
+
+
+class ValidationResult(BaseModel):
+    """페이지 검증 결과"""
+
+    is_valid: bool = Field(
+        ..., description="페이지가 단일 제품 상세 페이지이면 true, 아니면 false"
+    )
+    error_message: str = Field(
+        default="", description="부적합할 경우 사용자에게 전달할 한국어 에러 메시지"
+    )
+
+    # 유효한 경우에만 채워지는 필드들
+    product_name: str = Field(
+        default="", description="메인 제품명 (유효한 경우에만, h1 태그 우선)"
+    )
+    price: str = Field(default="", description="가격 정보 (유효한 경우에만)")
+    description_texts: List[ExtractedTextOutput] = Field(
+        default_factory=list,
+        description="메인 제품의 텍스트 설명 (유효한 경우에만, 추천 상품 제외)",
+    )
+    description_images: List[ExtractedImageOutput] = Field(
+        default_factory=list,
+        description="메인 제품의 이미지 (유효한 경우에만, 배제 최소화)",
+    )
 
 
 # ============================================================================
@@ -14,23 +64,37 @@ from ..graphs.summarize_page.state import ExtractedText
 
 SYSTEM_PROMPT = """
 # PERSONA:
-당신은 웹 페이지 콘텐츠를 분석하여, 해당 페이지가 **단일 제품 상세 페이지**인지 판단하는 전문가입니다.
+당신은 웹 페이지 콘텐츠를 분석하여, 해당 페이지가 **단일 제품 상세 페이지**인지 판단하고, 메인 제품 정보를 추출하는 전문가입니다.
 
 ## CONTEXT:
-사용자로부터 웹 페이지의 텍스트 콘텐츠를 입력받습니다. 당신의 임무는 이 페이지가 제품 분석에 적합한지 검증하는 것입니다.
+사용자로부터 웹 페이지의 텍스트와 이미지 정보를 입력받습니다. 당신의 임무는:
+1. 이 페이지가 제품 분석에 적합한지 검증
+2. 적합한 경우, 메인 제품의 정보를 추출
 
 ## TASK:
-입력된 페이지 텍스트를 분석하여, 다음 중 하나로 판단해야 합니다:
+입력된 페이지 콘텐츠를 분석하여, 다음을 수행해야 합니다:
 
-1. **적합 (Valid)**: 단일 제품의 상세 정보를 포함한 페이지
-2. **부적합 (Invalid)**: 제품 분석이 불가능하거나 부적절한 페이지
+1. **검증**: 단일 제품 상세 페이지인지 판단
+2. **파싱** (유효한 경우에만):
+   - 메인 제품명 추출
+   - 가격 정보 추출
+   - 메인 제품의 텍스트 설명 추출 (추천/연관 상품 제외)
+   - 메인 제품의 이미지 추출 (배제 최소화)
 
 ## OUTPUT FORMAT:
 
 ```json
 {
   "is_valid": boolean,
-  "error_message": "string"
+  "error_message": "string",
+  "product_name": "string",
+  "price": "string",
+  "description_texts": [
+    {"content": "string", "tagName": "string", "position": number}
+  ],
+  "description_images": [
+    {"src": "string", "alt": "string", "width": number, "height": number, "position": number}
+  ]
 }
 ```
 
@@ -38,6 +102,10 @@ SYSTEM_PROMPT = """
 
 - `is_valid`: 페이지가 제품 분석에 적합하면 `true`, 부적합하면 `false`
 - `error_message`: 부적합할 경우 사용자에게 전달할 한국어 에러 메시지 (적합하면 빈 문자열 "")
+- `product_name`: 메인 제품명 (유효한 경우에만, 주로 h1 태그에서 추출)
+- `price`: 가격 정보 (유효한 경우에만, 통화 기호 포함)
+- `description_texts`: 메인 제품의 텍스트 설명 배열 (유효한 경우에만)
+- `description_images`: 메인 제품의 이미지 배열 (유효한 경우에만)
 
 ## VALIDATION CRITERIA:
 
@@ -95,6 +163,25 @@ SYSTEM_PROMPT = """
 - 사용자가 이해하기 쉬운 명확한 한국어로 작성
 - 사용자가 어떤 액션을 취해야 하는지 안내 (예: "특정 제품을 선택해주세요")
 
+### INSTRUCTION 5: 메인 제품 정보 추출 (유효한 경우에만)
+- **제품명**: h1 태그를 최우선으로, 없으면 페이지 상단의 큰 텍스트에서 추출
+- **가격**: 숫자 + 통화 기호 형식으로 추출 (예: "1,698,400원", "$1,299")
+- **텍스트 설명**:
+  - 메인 제품 영역의 텍스트만 포함 (position 기준으로 상단 우선)
+  - 추천 상품, 연관 상품, 리뷰 영역은 제외
+  - h1, h2, h3, p, span 등 다양한 태그 포함
+  - tagName과 position 정보 유지
+- **이미지**:
+  - **배제 최소화**: 메인 제품과 관련 가능성이 있으면 모두 포함
+  - 제품 사진, 스펙 테이블 이미지, 사용 예시 이미지 모두 포함
+  - UI 요소(로고, 아이콘), 광고 배너만 제외
+  - alt, width, height, position 정보 유지
+
+### INSTRUCTION 6: 부적합한 경우 처리
+- `is_valid: false`인 경우:
+  - `error_message`만 채우고
+  - `product_name`, `price`, `description_texts`, `description_images`는 빈 값으로 반환
+
 ## EXAMPLES:
 
 ### Example 1: 적합한 페이지 (단일 제품)
@@ -122,7 +209,9 @@ SYSTEM_PROMPT = """
 # ============================================================================
 
 
-def build_messages(url: str, title: str, texts: List[ExtractedText]) -> list:
+def build_messages(
+    url: str, title: str, texts: List[ExtractedText], images: List[ExtractedImage]
+) -> list:
     """
     페이지 검증을 위한 LLM 메시지 구성
 
@@ -130,6 +219,7 @@ def build_messages(url: str, title: str, texts: List[ExtractedText]) -> list:
         url: 페이지 URL
         title: 페이지 제목
         texts: 추출된 텍스트 목록
+        images: 추출된 이미지 목록
 
     Returns:
         list: LLM에 전달할 메시지 목록
@@ -139,7 +229,7 @@ def build_messages(url: str, title: str, texts: List[ExtractedText]) -> list:
 
     # 페이지 텍스트 구성
     text_contents = []
-    for text in sorted_texts:
+    for i, text in enumerate(sorted_texts):
         content = text.get("content", "")
         tag_name = text.get("tagName", "")
         position = text.get("position", 0)
@@ -149,14 +239,32 @@ def build_messages(url: str, title: str, texts: List[ExtractedText]) -> list:
 
         # h1, h2, h3 태그는 명시적으로 표시 (중요도 높음)
         if tag_name in ["h1", "h2", "h3"]:
-            text_contents.append(f"[{tag_name.upper()}] {content}")
+            text_contents.append(
+                f"[{tag_name.upper()}] {content} (position: {position})"
+            )
         else:
-            text_contents.append(content)
+            text_contents.append(f"{content} (tagName: {tag_name}, position: {position})")
 
     page_text = "\n".join(text_contents)
 
+    # 이미지 정보 구성
+    sorted_images = sorted(images, key=lambda img: img.get("position", 0))
+    image_contents = []
+    for i, img in enumerate(sorted_images):
+        src = img.get("src", "")
+        alt = img.get("alt", "")
+        width = img.get("width", 0)
+        height = img.get("height", 0)
+        position = img.get("position", 0)
+
+        image_contents.append(
+            f"Image {i+1}: src={src}, alt={alt}, width={width}, height={height}, position={position}"
+        )
+
+    page_images = "\n".join(image_contents) if image_contents else "(이미지 없음)"
+
     # 사용자 메시지 구성
-    user_message = f"""아래 웹 페이지의 텍스트를 분석하여, 이 페이지가 단일 제품 상세 페이지인지 검증해주세요.
+    user_message = f"""아래 웹 페이지의 콘텐츠를 분석하여, 이 페이지가 단일 제품 상세 페이지인지 검증하고, 유효한 경우 메인 제품 정보를 추출해주세요.
 
 # 페이지 정보:
 - URL: {url}
@@ -165,7 +273,10 @@ def build_messages(url: str, title: str, texts: List[ExtractedText]) -> list:
 # 페이지 텍스트:
 {page_text}
 
-위 정보를 바탕으로 검증 결과를 JSON 형식으로 반환해주세요."""
+# 페이지 이미지:
+{page_images}
+
+위 정보를 바탕으로 검증 및 파싱 결과를 JSON 형식으로 반환해주세요."""
 
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

@@ -27,7 +27,7 @@ class ParsedContent(TypedDict, total=False):
     # 도메인 특화 파서 (구조화된 데이터)
     product_name: str  # 제품명
     price: str  # 가격
-    description_texts: list[str]  # 텍스트 설명/특징 배열
+    description_texts: list[ExtractedText]  # 텍스트 설명/특징 배열 (tagName, position 포함)
     description_images: list[ExtractedImage]  # 이미지 설명 배열
 
     # generic 파서 (원본 데이터)
@@ -62,8 +62,8 @@ class SummarizePageState(TypedDict):
     # 도메인별 파싱 결과
     parsed_content: ParsedContent
 
-    # 필터링된 유효한 이미지들
-    valid_images: list[ExtractedImage]
+    # 이미지들 (OCR 결과 포함)
+    images: list[ExtractedImage]
 
     # 제품 분석 결과
     product_analysis: ProductAnalysis

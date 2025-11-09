@@ -10,13 +10,13 @@ logger = get_logger(__name__)
 
 async def domain_parser_node(state: SummarizePageState) -> dict:
     """
-    도메인별 파서를 선택하여 페이지 콘텐츠를 파싱하는 노드
+    도메인 특화 파서를 사용하여 페이지 콘텐츠를 검증하고 파싱하는 노드
 
     Args:
         state: SummarizePageState
 
     Returns:
-        dict: parsed_content 업데이트
+        dict: is_valid_page, validation_error, parsed_content 업데이트
     """
     try:
         url = state["url"]
@@ -41,25 +41,28 @@ async def domain_parser_node(state: SummarizePageState) -> dict:
         logger.info(f"  Output: domain_type={parsed_content.get('domain_type')}")
 
         # 3. 파싱 결과 로깅 (도메인별로 다른 필드)
-        if parsed_content.get("domain_type") == "generic":
-            logger.info(f"    Generic: {len(parsed_content.get('texts', []))} processed texts")
-        else:
-            logger.info(f"    Product Name: {parsed_content.get('product_name', 'N/A')}")
-            logger.info(f"    Price: {parsed_content.get('price', 'N/A')}")
-            logger.info(
-                f"    Description texts: {len(parsed_content.get('description_texts', []))} items"
-            )
+        logger.info(f"    Product Name: {parsed_content.get('product_name', 'N/A')}")
+        logger.info(f"    Price: {parsed_content.get('price', 'N/A')}")
+        logger.info(
+            f"    Description texts: {len(parsed_content.get('description_texts', []))} items"
+        )
+        logger.info(
+            f"    Description images: {len(parsed_content.get('description_images', []))} items"
+        )
 
-        return {"parsed_content": parsed_content}
+        # 4. 도메인 특화 파서는 검증을 통과한 것으로 간주
+        return {
+            "is_valid_page": True,
+            "validation_error": "",
+            "parsed_content": parsed_content,
+        }
 
     except Exception as e:
         logger.error(f"✗ Domain parser node failed: {str(e)}")
-        logger.warning("  Fallback: using empty parsed content")
+        logger.warning("  Fallback: marking as invalid")
 
-        # Fallback: 빈 generic 파싱 결과 반환
+        # Fallback: 검증 실패 처리
         return {
-            "parsed_content": ParsedContent(
-                domain_type="generic",
-                texts=[],
-            )
+            "is_valid_page": False,
+            "validation_error": "도메인 파서 처리 중 오류가 발생했습니다",
         }
