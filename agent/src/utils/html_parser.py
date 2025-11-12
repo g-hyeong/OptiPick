@@ -45,17 +45,22 @@ class HTMLContentExtractor:
     ) -> List[ExtractedText]:
         """HTML body에서 텍스트 추출 (Extension의 textParser.ts 로직 이식)
 
+        중복 제거: 부모-자식 태그에서 동일한 텍스트가 반복 추출되는 것을 방지하기 위해
+        이미 추출된 텍스트 내용을 추적하여 중복을 제거합니다.
+        (BeautifulSoup best practice - content-based deduplication)
+
         Args:
             html_body: 정제된 HTML body 문자열
             min_length: 최소 텍스트 길이 (기본: 10)
             base_url: 기본 URL (상대 경로 처리용, 선택사항)
 
         Returns:
-            추출된 텍스트 목록
+            추출된 텍스트 목록 (중복 제거됨)
         """
         soup = BeautifulSoup(html_body, 'lxml')
         texts: List[ExtractedText] = []
         processed_elements = set()
+        seen_texts = set()  # 텍스트 내용 기반 중복 제거
         position = 0
 
         for tag_name in HTMLContentExtractor.TEXT_TAGS:
@@ -79,17 +84,22 @@ class HTMLContentExtractor:
                 if not HTMLContentExtractor._is_valid_text(text_content, min_length):
                     continue
 
-                # 부모 요소가 이미 같은 텍스트로 추출되었는지 확인 (중복 방지)
-                if HTMLContentExtractor._is_duplicate_of_parent(element, text_content, processed_elements):
+                # 텍스트 정리
+                cleaned_text = HTMLContentExtractor._clean_text(text_content)
+
+                # 중복 텍스트 제거 (부모-자식 태그 중복 방지)
+                if cleaned_text in seen_texts:
                     continue
 
+                # 텍스트 추가
                 texts.append(ExtractedText(
-                    content=HTMLContentExtractor._clean_text(text_content),
+                    content=cleaned_text,
                     tagName=element.name,
                     position=position
                 ))
 
                 processed_elements.add(id(element))
+                seen_texts.add(cleaned_text)
                 position += 100  # DOM 순서 기반 position
 
         return texts
@@ -211,6 +221,10 @@ class HTMLContentExtractor:
     @staticmethod
     def _is_duplicate_of_parent(element: Tag, text_content: str, processed_elements: set) -> bool:
         """부모 요소가 동일한 텍스트를 이미 추출했는지 확인 (중복 방지)
+
+        DEPRECATED: 이 함수는 더 이상 사용되지 않습니다.
+        extract_texts()에서 텍스트 내용 기반 중복 제거(seen_texts set)로 대체되었습니다.
+        호환성을 위해 유지되지만, 향후 제거될 수 있습니다.
 
         Args:
             element: 현재 처리 중인 요소
