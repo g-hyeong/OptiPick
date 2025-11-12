@@ -20,17 +20,28 @@ SYSTEM_PROMPT = """
 당신은 사용자로부터 웹 페이지 콘텐츠(텍스트, 이미지 설명)를 입력받습니다. 이 콘텐츠에는 분석해야 할 단일 제품에 대한 정보가 포함되어 있습니다.
 
 ## INPUT FORMAT:
-```json
-{
-  "page_text": "string",
-  "image_descriptions": ["string"]
-}
-````
+
+입력은 두 개의 CSV 테이블로 제공됩니다:
+
+1. **Text Information (CSV format):**
+```csv
+tag,text,position
+h1,제품명,0
+p,제품 설명,100
+span,가격 정보,200
+```
+
+2. **OCR Text Information (CSV format):**
+```csv
+alt,ocr_text
+이미지1 설명,이미지에서 추출된 텍스트
+이미지2 설명,이미지에서 추출된 텍스트
+```
 
 ### INPUT FORMAT DESCRIPTION:
 
-  - `page_text`: 웹 페이지에서 추출된 전체 텍스트 콘텐츠입니다.
-  - `image_descriptions`: 제품과 관련된 이미지의 alt 텍스트 또는 OCR 결과 목록입니다.
+  - **Text Information**: HTML에서 추출된 텍스트 데이터 (tag: HTML 태그명, text: 텍스트 내용, position: DOM 순서)
+  - **OCR Text Information**: 이미지 OCR 결과 (alt: 이미지 대체 텍스트, ocr_text: OCR로 추출된 텍스트)
 
 ## TASK:
 
@@ -87,9 +98,12 @@ SYSTEM_PROMPT = """
 ### ANALYSIS GUIDELINE 4: PRICE EXTRACTION
 
   - **가격:** `product_name`으로 추출된 **핵심 제품의 실제 판매 가격**을 찾습니다.
+  - **Text Information과 OCR Text Information 모두를 꼼꼼히 확인**하여 가격 패턴을 찾습니다.
+  - 가격 패턴: 숫자 + 통화 단위 (예: "59,000원", "$1,299", "1,698,400원", "3,690,000원")
   - 다른 제품의 가격, 할인 전 원가(줄 그어진 가격), 적립금 등이 아닌, 고객이 실제로 지불해야 하는 가격 또는 최종 할인가를 우선적으로 추출합니다.
   - 가격 형식(예: '₩30,000', '30,000원', '30,000', '$25.50', 'USD 25.50')은 원본 텍스트에 최대한 가깝게 유지합니다.
   - 만약 가격이 범위로(예: "20,000\~25,000원") 표시되면 해당 범위를 그대로 추출합니다.
+  - **[중요]** OCR Text Information에서 추출된 텍스트에도 가격 정보가 포함될 수 있으므로 반드시 확인합니다.
 
 ### ANALYSIS GUIDELINE 5: KEY FEATURE (MATERIAL & SPEC) EXTRACTION
 
@@ -191,48 +205,62 @@ SYSTEM_PROMPT = """
 # ============================================================================
 
 def build_user_prompt(texts: List[ExtractedText], images: List[ExtractedImage]) -> str:
-    """사용자 프롬프트 생성
+    """사용자 프롬프트 생성 (CSV 형식)
 
     Args:
         texts: 추출된 텍스트 리스트
         images: 추출된 이미지 리스트
 
     Returns:
-        사용자 프롬프트 문자열
+        사용자 프롬프트 문자열 (CSV 형식)
     """
-    # 텍스트 정보 구조화 (position 순으로 정렬, content와 position만 사용)
+    # 1. 텍스트 정보를 CSV 형식으로 변환
     sorted_texts = sorted(texts, key=lambda t: t.get("position", 0))
-    text_contents = []
+    text_csv_lines = ["tag,text,position"]  # CSV 헤더
+
     for text in sorted_texts:
+        tag = text.get("tagName", "").strip()
         content = text.get("content", "").strip()
         position = text.get("position", 0)
-        if content:
-            text_contents.append(f"[pos:{position}] {content}")
 
-    # 이미지 정보 구조화 (alt, position, ocr_result만 사용)
-    image_contents = []
-    for idx, img in enumerate(images):
+        if content:
+            # CSV 이스케이핑: 쉼표, 줄바꿈이 포함된 경우 따옴표로 감싸기
+            if "," in content or "\n" in content or '"' in content:
+                content = '"' + content.replace('"', '""') + '"'
+            text_csv_lines.append(f"{tag},{content},{position}")
+
+    text_csv = "\n".join(text_csv_lines) if len(text_csv_lines) > 1 else "[No text information available]"
+
+    # 2. OCR 결과를 CSV 형식으로 변환
+    ocr_csv_lines = ["alt,ocr_text"]  # CSV 헤더
+
+    for img in images:
         alt = img.get("alt", "").strip()
         ocr = img.get("ocr_result", "").strip()
-        position = img.get("position", 0)
 
-        if alt or ocr:
-            image_info = f"Image {idx + 1} [pos:{position}]:"
-            if alt:
-                image_info += f"\n  Alt: {alt}"
-            if ocr:
-                image_info += f"\n  OCR: {ocr}"
-            image_contents.append(image_info)
+        if ocr:  # OCR 결과가 있는 경우만 포함
+            # CSV 이스케이핑
+            if "," in alt or "\n" in alt or '"' in alt:
+                alt = '"' + alt.replace('"', '""') + '"'
+            if "," in ocr or "\n" in ocr or '"' in ocr:
+                ocr = '"' + ocr.replace('"', '""') + '"'
+            ocr_csv_lines.append(f"{alt},{ocr}")
+
+    ocr_csv = "\n".join(ocr_csv_lines) if len(ocr_csv_lines) > 1 else "[No OCR information available]"
 
     return f"""Analyze the following product page information and extract product analysis.
 
-**Text Information:**
-{chr(10).join(text_contents) if text_contents else "[No text information available]"}
+**Text Information (CSV format):**
+```csv
+{text_csv}
+```
 
-**Image Information:**
-{chr(10).join(image_contents) if image_contents else "[No image information available]"}
+**OCR Text Information (CSV format):**
+```csv
+{ocr_csv}
+```
 
-Based on the above information, provide a comprehensive product analysis. If any information is missing or unclear, use "unknown" for string fields or empty arrays for list fields."""
+Based on the above CSV data, provide a comprehensive product analysis. Pay special attention to price information which may appear in either Text Information or OCR Text Information. If any information is missing or unclear, use "unknown" for string fields or empty arrays for list fields."""
 
 
 # ============================================================================

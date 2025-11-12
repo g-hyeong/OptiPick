@@ -1,5 +1,7 @@
 """제품 분석 노드 - LLM을 사용하여 텍스트와 이미지 정보로부터 제품 분석 수행"""
 
+from datetime import datetime
+from pathlib import Path
 from typing import List
 
 from pydantic import BaseModel, Field
@@ -13,6 +15,10 @@ from ..state import ExtractedImage, ExtractedText, ProductAnalysis, SummarizePag
 
 logger = get_logger(__name__)
 settings = BaseSettings()
+
+# logs 디렉토리 경로 (agent/logs/)
+LOGS_DIR = Path(__file__).parent.parent.parent.parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 
 class ProductAnalysisOutput(BaseModel):
@@ -153,8 +159,28 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
             logger.warning("  No data available, returning default analysis")
             return {"product_analysis": create_default_analysis()}
 
-        # 2. 프롬프트 구성
+        # 2. 프롬프트 구성 및 입력 데이터 저장
         messages = analyze_product.build_messages(texts, images)
+
+        # 디버깅: LLM 입력 데이터를 logs/YYYY-MM-DD/processed_source.txt에 저장
+        try:
+            today = datetime.now().strftime("%Y-%m-%d")
+            date_dir = LOGS_DIR / today
+            date_dir.mkdir(exist_ok=True)
+
+            processed_source_path = date_dir / "processed_source.txt"
+            # user 메시지에서 CSV 데이터 추출 (messages[1]이 user prompt)
+            user_prompt = messages[1]["content"]
+
+            with open(processed_source_path, "w", encoding="utf-8") as f:
+                f.write(f"# LLM Input Data for analyze_product_node\n")
+                f.write(f"# Timestamp: {datetime.now().isoformat()}\n")
+                f.write(f"# Domain Type: {domain_type}\n\n")
+                f.write(user_prompt)
+
+            logger.info(f"  Saved LLM input data to: {processed_source_path}")
+        except Exception as e:
+            logger.warning(f"  Failed to save processed source: {e}")
 
         # 3. LLM 호출 (structured output)
         llm_client = LLMClient(

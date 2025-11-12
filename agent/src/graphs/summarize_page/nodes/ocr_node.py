@@ -13,20 +13,19 @@ settings = SummarizePageSettings()
 
 
 async def ocr_node(state: SummarizePageState) -> dict:
-    """parsed_content의 이미지에 OCR 수행하는 노드"""
+    """모든 이미지에 OCR 수행하는 노드"""
     try:
-        # parsed_content에서 이미지 가져오기
-        parsed_content = state.get("parsed_content", {})
-        images = list(parsed_content.get("description_images", []))
+        # state에서 이미지 가져오기 (validate_page_node에서 추출됨)
+        images = list(state.get("images", []))
 
         logger.info(f"━━━ OCR Node ━━━")
-        logger.info(f"  Input: {len(images)} images from parsed_content")
+        logger.info(f"  Input: {len(images)} images from state")
 
         if not images:
             logger.info("  No images to process, skipping OCR")
             return {"images": []}
 
-        # OCR 서비스 팩토리를 사용하여 적절한 서비스 인스턴스 생성
+        # OCR 서비스로 모든 이미지 처리
         ocr_service = get_ocr_service(settings)
         processed_images = await ocr_service.process_images(images)
 
@@ -38,7 +37,7 @@ async def ocr_node(state: SummarizePageState) -> dict:
         ]
         total_chars = sum(len(text) for text in ocr_texts)
         logger.info(
-            f"OCR extraction completed",
+            f"  ✓ OCR completed: {len(ocr_texts)}/{len(images)} images extracted",
             extra={
                 "total_images": len(images),
                 "successful_extractions": len(ocr_texts),

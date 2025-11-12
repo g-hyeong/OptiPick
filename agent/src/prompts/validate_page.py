@@ -3,7 +3,7 @@
 LLM을 사용하여 웹 페이지가 제품 분석에 적합한지 검증하기 위한 프롬프트
 """
 
-from typing import Any, List
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -13,29 +13,8 @@ from pydantic import BaseModel, Field, field_validator
 # ============================================================================
 
 
-class ExtractedTextOutput(BaseModel):
-    """추출된 텍스트 (LLM 출력용)"""
-
-    content: str = Field(..., description="텍스트 내용")
-    tagName: str = Field(..., description="HTML 태그명 (h1, h2, h3, p, span 등)")
-    position: float = Field(..., description="페이지 상단으로부터의 순서 (작을수록 상단)")
-
-
-class ExtractedImageOutput(BaseModel):
-    """추출된 이미지 (LLM 출력용) - 간소화 버전"""
-
-    src: str = Field(..., description="이미지 URL (절대 경로)")
-    alt: str = Field(default="", description="대체 텍스트 (없으면 빈 문자열)")
-
-    @field_validator("alt", mode="before")
-    @classmethod
-    def validate_alt(cls, v: Any) -> str:
-        """None을 빈 문자열로 변환"""
-        return v if v is not None else ""
-
-
 class ValidationResult(BaseModel):
-    """페이지 검증 결과"""
+    """페이지 검증 결과 - 검증 전용 (파싱은 별도 수행)"""
 
     is_valid: bool = Field(
         ..., description="페이지가 단일 제품 상세 페이지이면 true, 아니면 false"
@@ -44,23 +23,7 @@ class ValidationResult(BaseModel):
         default="", description="부적합할 경우 사용자에게 전달할 한국어 에러 메시지"
     )
 
-    # 유효한 경우에만 채워지는 필드들
-    product_name: str = Field(
-        default="", description="메인 제품명 (유효한 경우에만, h1 태그 우선, 없으면 빈 문자열)"
-    )
-    price: str = Field(
-        default="", description="가격 정보 (유효한 경우에만, 없으면 빈 문자열)"
-    )
-    description_texts: List[ExtractedTextOutput] = Field(
-        default_factory=list,
-        description="메인 제품의 텍스트 설명 (유효한 경우에만, 추천 상품 제외)",
-    )
-    description_images: List[ExtractedImageOutput] = Field(
-        default_factory=list,
-        description="메인 제품의 이미지 (유효한 경우에만, 배제 최소화)",
-    )
-
-    @field_validator("error_message", "product_name", "price", mode="before")
+    @field_validator("error_message", mode="before")
     @classmethod
     def validate_str_fields(cls, v: Any) -> str:
         """None을 빈 문자열로 변환"""
@@ -73,37 +36,21 @@ class ValidationResult(BaseModel):
 
 SYSTEM_PROMPT = """
 # PERSONA:
-당신은 웹 페이지 콘텐츠를 분석하여, 해당 페이지가 **단일 제품 상세 페이지**인지 판단하고, 메인 제품 정보를 추출하는 전문가입니다.
+당신은 웹 페이지 콘텐츠를 분석하여, 해당 페이지가 **단일 제품 상세 페이지**인지 판단하는 검증 전문가입니다.
 
 ## CONTEXT:
-사용자로부터 웹 페이지의 텍스트와 이미지 정보를 입력받습니다. 당신의 임무는:
-1. 이 페이지가 제품 분석에 적합한지 검증
-2. 적합한 경우, 메인 제품의 정보를 추출
+사용자로부터 웹 페이지의 HTML을 입력받습니다. 당신의 임무는:
+- 이 페이지가 제품 분석에 적합한지 검증
 
 ## TASK:
-입력된 페이지 콘텐츠를 분석하여, 다음을 수행해야 합니다:
-
-1. **검증**: 단일 제품 상세 페이지인지 판단
-2. **파싱** (유효한 경우에만):
-   - 메인 제품명 추출
-   - 가격 정보 추출
-   - 메인 제품의 텍스트 설명 추출 (추천/연관 상품 제외)
-   - 메인 제품의 이미지 추출 (배제 최소화)
+입력된 페이지 콘텐츠를 분석하여, 단일 제품 상세 페이지인지 판단합니다.
 
 ## OUTPUT FORMAT:
 
 ```json
 {
   "is_valid": boolean,
-  "error_message": "string",
-  "product_name": "string",
-  "price": "string",
-  "description_texts": [
-    {"content": "string", "tagName": "string", "position": number}
-  ],
-  "description_images": [
-    {"src": "string", "alt": "string"}
-  ]
+  "error_message": "string"
 }
 ```
 
@@ -111,10 +58,6 @@ SYSTEM_PROMPT = """
 
 - `is_valid`: 페이지가 제품 분석에 적합하면 `true`, 부적합하면 `false`
 - `error_message`: 부적합할 경우 사용자에게 전달할 한국어 에러 메시지 (적합하면 빈 문자열 "")
-- `product_name`: 메인 제품명 (유효한 경우에만, 주로 h1 태그에서 추출)
-- `price`: 가격 정보 (유효한 경우에만, 통화 기호 포함)
-- `description_texts`: 메인 제품의 텍스트 설명 배열 (유효한 경우에만)
-- `description_images`: 메인 제품의 이미지 배열 (유효한 경우에만)
 
 ## VALIDATION CRITERIA:
 
@@ -150,7 +93,7 @@ SYSTEM_PROMPT = """
 ## INSTRUCTIONS:
 
 ### INSTRUCTION 1: 메인 제품 식별
-- **페이지 상단** (position 값이 작은 콘텐츠)과 **h1 태그**를 최우선으로 분석
+- **페이지 상단** HTML과 **h1 태그**를 최우선으로 분석
 - 페이지 상단에 명확한 제품명, 가격, 설명이 있고, 하단에 추천/연관 상품이 있는 구조는 **적합**
 - **핵심 질문**: "페이지 상단에 메인으로 설명하는 특정 제품이 명확한가?"
 - 추천 상품, 연관 상품, 함께 구매한 상품 등은 무시 (보통 페이지 하단이나 사이드바에 위치)
@@ -172,44 +115,31 @@ SYSTEM_PROMPT = """
 - 사용자가 이해하기 쉬운 명확한 한국어로 작성
 - 사용자가 어떤 액션을 취해야 하는지 안내 (예: "특정 제품을 선택해주세요")
 
-### INSTRUCTION 5: 메인 제품 정보 추출 (유효한 경우에만)
-- **제품명**: h1 태그를 최우선으로, 없으면 페이지 상단의 큰 텍스트에서 추출
-- **가격**: 숫자 + 통화 기호 형식으로 추출 (예: "1,698,400원", "$1,299")
-- **텍스트 설명**:
-  - 메인 제품 영역의 텍스트만 포함 (position 기준으로 상단 우선)
-  - 추천 상품, 연관 상품, 리뷰 영역은 제외
-  - h1, h2, h3, p, span 등 다양한 태그 포함
-  - tagName과 position 정보 유지
-- **이미지**:
-  - **배제 최소화**: 메인 제품과 관련 가능성이 있으면 모두 포함
-  - 제품 사진, 스펙 테이블 이미지, 사용 예시 이미지 모두 포함
-  - UI 요소(로고, 아이콘), 광고 배너만 제외
-  - src(이미지 URL)와 alt(대체 텍스트)만 포함
-
-### INSTRUCTION 6: 부적합한 경우 처리
-- `is_valid: false`인 경우:
-  - `error_message`만 채우고
-  - `product_name`, `price`, `description_texts`, `description_images`는 빈 값으로 반환
+### INSTRUCTION 5: 부적합한 경우 처리
+- `is_valid: false`인 경우 `error_message`에 명확한 안내 메시지 작성
+- `is_valid: true`인 경우 `error_message`는 빈 문자열 ""로 반환
 
 ## EXAMPLES:
 
 ### Example 1: 적합한 페이지 (단일 제품)
-**Input**: "[H1] Samsung Galaxy S24 Ultra | 가격: 1,698,400원 | 256GB, 12GB RAM, ..."
+**Input HTML**: "<h1>Samsung Galaxy S24 Ultra</h1><div>가격: 1,698,400원</div><p>256GB, 12GB RAM...</p>"
 **Output**: `{"is_valid": true, "error_message": ""}`
+**이유**: 메인 제품(Galaxy S24 Ultra)의 상세 정보가 명확함
 
 ### Example 2: 적합한 페이지 (메인 제품 + 추천 상품)
-**Input**: "[H1] MacBook Pro 16 | 3,690,000원 | M3 Max, 36GB RAM | ... (중략) ... [H3] 이런 상품은 어때요? | MacBook Air | iPad Pro | ..."
+**Input HTML**: "<h1>MacBook Pro 16</h1><div>3,690,000원</div><p>M3 Max, 36GB RAM</p>...(중략)...<h3>이런 상품은 어때요?</h3><div>MacBook Air</div><div>iPad Pro</div>"
 **Output**: `{"is_valid": true, "error_message": ""}`
 **이유**: 페이지 상단에 MacBook Pro 16의 상세 정보가 명확하고, 하단의 추천 상품은 부가 정보
 
 ### Example 3: 부적합한 페이지 (리스팅)
-**Input**: "[H1] 검색 결과 (총 342개) | 정렬: 인기순 | 1. 노트북 A - 120만원 | 2. 노트북 B - 150만원 | ..."
+**Input HTML**: "<h1>검색 결과 (총 342개)</h1><select>정렬: 인기순</select><div>1. 노트북 A - 120만원</div><div>2. 노트북 B - 150만원</div>"
 **Output**: `{"is_valid": false, "error_message": "여러 제품이 나열된 페이지입니다. 특정 제품을 선택해주세요"}`
 **이유**: 여러 제품이 동등하게 나열되고 메인 제품이 없음
 
 ### Example 4: 부적합한 페이지 (정보 부족)
-**Input**: "페이지를 찾을 수 없습니다 | 404 Error | 홈으로 돌아가기"
+**Input HTML**: "<h1>페이지를 찾을 수 없습니다</h1><p>404 Error</p><a>홈으로 돌아가기</a>"
 **Output**: `{"is_valid": false, "error_message": "제품 정보를 찾을 수 없습니다"}`
+**이유**: 에러 페이지로 제품 정보 없음
 """
 
 

@@ -1,29 +1,32 @@
-"""페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보 추출"""
+"""페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증"""
 
+from datetime import datetime
 from pathlib import Path
 
 from src.config.base import BaseSettings
 from src.prompts import validate_page
 from src.prompts.validate_page import ValidationResult
+from src.utils.html_parser import HTMLContentExtractor
 from src.utils.llm.client import LLMClient
 from src.utils.logger import get_logger
 
-from ..state import ExtractedImage, ExtractedText, ParsedContent, SummarizePageState
+from ..state import ParsedContent, SummarizePageState
 
 logger = get_logger(__name__)
 settings = BaseSettings()
 
-# logs 디렉토리 경로
-LOGS_DIR = Path(__file__).parent.parent.parent.parent / "logs"
+# logs 디렉토리 경로 (agent/logs/)
+LOGS_DIR = Path(__file__).parent.parent.parent.parent.parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
 
 async def validate_page_node(state: SummarizePageState) -> dict:
     """
-    페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보를 추출하는 노드
+    페이지가 제품 분석에 적합한지 검증하는 노드 (검증 전용)
 
-    Extension의 Readability.js가 이미 메인 콘텐츠를 추출했으므로,
-    Agent는 받은 HTML을 그대로 LLM에 전달합니다.
+    1. LLM으로 페이지 검증 (is_valid, error_message만 반환)
+    2. 유효한 경우, HTMLContentExtractor로 texts와 images 추출
+    3. ParsedContent에 저장하여 다음 노드로 전달
 
     Args:
         state: SummarizePageState
@@ -40,11 +43,16 @@ async def validate_page_node(state: SummarizePageState) -> dict:
         logger.info(f"  URL: {url}")
         logger.info(f"  HTML body length: {len(html_body)} chars")
 
-        # 디버깅: Readability로 추출된 HTML을 logs/parsed.html에 저장
-        parsed_html_path = LOGS_DIR / "parsed.html"
+        # 디버깅: Readability로 추출된 HTML을 logs/YYYY-MM-DD/parsed.html에 저장
+        today = datetime.now().strftime("%Y-%m-%d")
+        date_dir = LOGS_DIR / today
+        date_dir.mkdir(exist_ok=True)
+
+        parsed_html_path = date_dir / "parsed.html"
         with open(parsed_html_path, "w", encoding="utf-8") as f:
             f.write(f"<!-- URL: {url} -->\n")
-            f.write(f"<!-- Title: {title} -->\n\n")
+            f.write(f"<!-- Title: {title} -->\n")
+            f.write(f"<!-- Timestamp: {datetime.now().isoformat()} -->\n\n")
             f.write(html_body)
         logger.info(f"  Saved parsed HTML to: {parsed_html_path}")
 
@@ -56,14 +64,13 @@ async def validate_page_node(state: SummarizePageState) -> dict:
                 "validation_error": "제품 정보를 찾을 수 없습니다",
             }
 
-        # 1. 프롬프트 구성 (Extension의 Readability가 이미 정제한 HTML 전달)
+        # 1. LLM으로 페이지 검증
         messages = validate_page.build_messages(url, title, html_body)
 
-        # 2. LLM 호출 (structured output)
         llm_client = LLMClient(
             provider=settings.default_llm_provider,
             model=settings.default_llm_model,
-            temperature=0.3,  # 검증은 더 결정적이어야 하므로 낮은 temperature
+            temperature=0.3,  # 검증은 결정적이어야 하므로 낮은 temperature
             max_tokens=settings.default_max_tokens,
             timeout=settings.default_llm_timeout,
         )
@@ -76,6 +83,7 @@ async def validate_page_node(state: SummarizePageState) -> dict:
         logger.info(
             f"  Validation Result: {'✓ Valid' if result.is_valid else '✗ Invalid'}"
         )
+
         if not result.is_valid:
             logger.info(f"  Error Message: {result.error_message}")
             return {
@@ -83,46 +91,35 @@ async def validate_page_node(state: SummarizePageState) -> dict:
                 "validation_error": result.error_message,
             }
 
-        # 유효한 경우: ValidationResult → ParsedContent 변환
-        logger.info(f"  Product Name: {result.product_name}")
-        logger.info(f"  Price: {result.price}")
-        logger.info(
-            f"  Extracted: {len(result.description_texts)} texts, {len(result.description_images)} images"
+        # 2. 유효한 경우: HTMLContentExtractor로 texts와 images 추출
+        logger.info("  Extracting texts and images using HTMLContentExtractor...")
+
+        texts = HTMLContentExtractor.extract_texts(
+            html_body=html_body,
+            min_length=10,
+            base_url=url,
         )
 
-        # Pydantic 모델 → TypedDict 변환
-        parsed_texts: list[ExtractedText] = [
-            ExtractedText(
-                content=text.content,
-                tagName=text.tagName,
-                position=text.position,
-            )
-            for text in result.description_texts
-        ]
+        images = HTMLContentExtractor.extract_images(
+            html_body=html_body,
+            base_url=url,
+            min_width=100,
+            min_height=100,
+        )
 
-        parsed_images: list[ExtractedImage] = [
-            ExtractedImage(
-                src=img.src,
-                alt=img.alt,
-                width=0,  # LLM 출력에는 없음, 기본값 사용
-                height=0,
-                position=idx,  # 배열 순서를 position으로 사용
-            )
-            for idx, img in enumerate(result.description_images)
-        ]
+        logger.info(f"  Extracted: {len(texts)} texts, {len(images)} images")
 
+        # 3. ParsedContent 구성
         parsed_content = ParsedContent(
             domain_type="generic",
-            product_name=result.product_name,
-            price=result.price,
-            description_texts=parsed_texts,
-            description_images=parsed_images,
+            texts=texts,
         )
 
         return {
             "is_valid_page": True,
             "validation_error": "",
             "parsed_content": parsed_content,
+            "images": images,  # State에 images 직접 저장
         }
 
     except Exception as e:
