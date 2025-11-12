@@ -115,7 +115,10 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
         # 1. parsed_content에서 텍스트 추출
         if domain_type == "generic":
             # Generic 파서: texts 필드 사용
+            # Fallback: LLM validation에서 description_texts로 저장된 경우도 처리
             texts = parsed_content.get("texts", [])
+            if not texts:
+                texts = parsed_content.get("description_texts", [])
             logger.info(f"  Input (Generic): {len(texts)} texts, {len(images)} images")
         else:
             # 도메인 특화 파서: 구조화된 데이터를 ExtractedText 형태로 변환

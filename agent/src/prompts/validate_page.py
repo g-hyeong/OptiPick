@@ -7,8 +7,6 @@ from typing import Any, List
 
 from pydantic import BaseModel, Field, field_validator
 
-from ..graphs.summarize_page.state import ExtractedImage, ExtractedText
-
 
 # ============================================================================
 # PYDANTIC MODELS
@@ -220,55 +218,18 @@ SYSTEM_PROMPT = """
 # ============================================================================
 
 
-def build_messages(
-    url: str, title: str, texts: List[ExtractedText], images: List[ExtractedImage]
-) -> list:
+def build_messages(url: str, title: str, html_body: str) -> list:
     """
     페이지 검증을 위한 LLM 메시지 구성
 
     Args:
         url: 페이지 URL
         title: 페이지 제목
-        texts: 추출된 텍스트 목록
-        images: 추출된 이미지 목록
+        html_body: Readability로 정제된 HTML (메인 콘텐츠만 포함)
 
     Returns:
         list: LLM에 전달할 메시지 목록
     """
-    # 텍스트를 position 순으로 정렬
-    sorted_texts = sorted(texts, key=lambda t: t.get("position", 0))
-
-    # 페이지 텍스트 구성
-    text_contents = []
-    for i, text in enumerate(sorted_texts):
-        content = text.get("content", "")
-        tag_name = text.get("tagName", "")
-        position = text.get("position", 0)
-
-        if not content:
-            continue
-
-        # h1, h2, h3 태그는 명시적으로 표시 (중요도 높음)
-        if tag_name in ["h1", "h2", "h3"]:
-            text_contents.append(
-                f"[{tag_name.upper()}] {content} (position: {position})"
-            )
-        else:
-            text_contents.append(f"{content} (tagName: {tag_name}, position: {position})")
-
-    page_text = "\n".join(text_contents)
-
-    # 이미지 정보 구성 (src, alt만 포함)
-    sorted_images = sorted(images, key=lambda img: img.get("position", 0))
-    image_contents = []
-    for i, img in enumerate(sorted_images):
-        src = img.get("src", "")
-        alt = img.get("alt", "")
-
-        image_contents.append(f"Image {i+1}: src={src}, alt={alt}")
-
-    page_images = "\n".join(image_contents) if image_contents else "(이미지 없음)"
-
     # 사용자 메시지 구성
     user_message = f"""아래 웹 페이지의 콘텐츠를 분석하여, 이 페이지가 단일 제품 상세 페이지인지 검증하고, 유효한 경우 메인 제품 정보를 추출해주세요.
 
@@ -276,11 +237,8 @@ def build_messages(
 - URL: {url}
 - 제목: {title}
 
-# 페이지 텍스트:
-{page_text}
-
-# 페이지 이미지:
-{page_images}
+# 페이지 HTML (Readability로 정제됨):
+{html_body}
 
 위 정보를 바탕으로 검증 및 파싱 결과를 JSON 형식으로 반환해주세요."""
 

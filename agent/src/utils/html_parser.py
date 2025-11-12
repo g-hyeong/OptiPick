@@ -70,13 +70,17 @@ class HTMLContentExtractor:
                 if not HTMLContentExtractor._should_extract_text(element):
                     continue
 
-                # 직접적인 텍스트만 추출 (자식 요소의 텍스트 제외)
-                text_content = HTMLContentExtractor._get_direct_text(element)
+                # 자식 요소 포함한 전체 텍스트 추출 (가격 정보 등을 놓치지 않기 위함)
+                text_content = element.get_text(strip=True)
                 if not text_content:
                     continue
 
                 # 텍스트 유효성 검사
                 if not HTMLContentExtractor._is_valid_text(text_content, min_length):
+                    continue
+
+                # 부모 요소가 이미 같은 텍스트로 추출되었는지 확인 (중복 방지)
+                if HTMLContentExtractor._is_duplicate_of_parent(element, text_content, processed_elements):
                     continue
 
                 texts.append(ExtractedText(
@@ -205,9 +209,32 @@ class HTMLContentExtractor:
         return True
 
     @staticmethod
+    def _is_duplicate_of_parent(element: Tag, text_content: str, processed_elements: set) -> bool:
+        """부모 요소가 동일한 텍스트를 이미 추출했는지 확인 (중복 방지)
+
+        Args:
+            element: 현재 처리 중인 요소
+            text_content: 현재 요소의 텍스트
+            processed_elements: 이미 처리된 요소들의 ID set
+
+        Returns:
+            중복이면 True, 아니면 False
+        """
+        parent = element.parent
+        while parent:
+            # 부모가 이미 처리되었고, 텍스트가 같으면 중복으로 판단
+            if id(parent) in processed_elements:
+                parent_text = parent.get_text(strip=True)
+                if parent_text == text_content:
+                    return True
+            parent = parent.parent
+        return False
+
+    @staticmethod
     def _get_direct_text(element: Tag) -> str:
         """요소의 직접적인 텍스트만 추출 (자식 요소 제외)
         Extension의 textParser.ts getDirectTextContent 이식
+        [Note] 현재는 사용되지 않지만 호환성을 위해 유지
         """
         text = ''
         for node in element.children:

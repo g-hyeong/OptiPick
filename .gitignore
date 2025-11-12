@@ -46,3 +46,5 @@ data-pipeline/.python-version
 
 # Docker
 docker-compose.override.yml
+
+logs/

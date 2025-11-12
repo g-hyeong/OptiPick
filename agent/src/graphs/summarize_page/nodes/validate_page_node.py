@@ -1,9 +1,10 @@
 """페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보 추출"""
 
+from pathlib import Path
+
 from src.config.base import BaseSettings
 from src.prompts import validate_page
 from src.prompts.validate_page import ValidationResult
-from src.utils.html_parser import HTMLContentExtractor
 from src.utils.llm.client import LLMClient
 from src.utils.logger import get_logger
 
@@ -12,10 +13,17 @@ from ..state import ExtractedImage, ExtractedText, ParsedContent, SummarizePageS
 logger = get_logger(__name__)
 settings = BaseSettings()
 
+# logs 디렉토리 경로
+LOGS_DIR = Path(__file__).parent.parent.parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
+
 
 async def validate_page_node(state: SummarizePageState) -> dict:
     """
     페이지가 제품 분석에 적합한지 검증하고 메인 제품 정보를 추출하는 노드
+
+    Extension의 Readability.js가 이미 메인 콘텐츠를 추출했으므로,
+    Agent는 받은 HTML을 그대로 LLM에 전달합니다.
 
     Args:
         state: SummarizePageState
@@ -32,24 +40,24 @@ async def validate_page_node(state: SummarizePageState) -> dict:
         logger.info(f"  URL: {url}")
         logger.info(f"  HTML body length: {len(html_body)} chars")
 
-        # HTML에서 텍스트와 이미지 추출
-        texts = HTMLContentExtractor.extract_texts(
-            html_body=html_body, min_length=10, base_url=url
-        )
-        images = HTMLContentExtractor.extract_images(html_body=html_body, base_url=url)
-
-        logger.info(f"  Extracted: {len(texts)} texts, {len(images)} images")
+        # 디버깅: Readability로 추출된 HTML을 logs/parsed.html에 저장
+        parsed_html_path = LOGS_DIR / "parsed.html"
+        with open(parsed_html_path, "w", encoding="utf-8") as f:
+            f.write(f"<!-- URL: {url} -->\n")
+            f.write(f"<!-- Title: {title} -->\n\n")
+            f.write(html_body)
+        logger.info(f"  Saved parsed HTML to: {parsed_html_path}")
 
         # 입력 데이터 검증
-        if not texts:
-            logger.warning("  No text data available, marking as invalid")
+        if not html_body or len(html_body.strip()) < 100:
+            logger.warning("  HTML body too short or empty, marking as invalid")
             return {
                 "is_valid_page": False,
                 "validation_error": "제품 정보를 찾을 수 없습니다",
             }
 
-        # 1. 프롬프트 구성
-        messages = validate_page.build_messages(url, title, texts, images)
+        # 1. 프롬프트 구성 (Extension의 Readability가 이미 정제한 HTML 전달)
+        messages = validate_page.build_messages(url, title, html_body)
 
         # 2. LLM 호출 (structured output)
         llm_client = LLMClient(

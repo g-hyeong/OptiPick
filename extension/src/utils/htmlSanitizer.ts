@@ -1,90 +1,81 @@
 import DOMPurify from 'dompurify';
 
 /**
+ * 모든 표준 HTML5 태그 목록
+ * DOMPurify는 화이트리스트 방식만 지원하므로, 가능한 모든 태그를 포함
+ */
+const ALL_HTML_TAGS = [
+  // 구조 및 레이아웃
+  'div', 'span', 'section', 'article', 'main', 'aside', 'header', 'footer', 'nav',
+  'form', 'fieldset', 'legend', 'details', 'summary', 'dialog',
+  // 텍스트
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'b', 'i', 'u', 'mark',
+  'small', 'del', 'ins', 'sub', 'sup', 'blockquote', 'pre', 'code', 'kbd', 'samp',
+  'var', 'cite', 'dfn', 'abbr', 'time', 'address', 'q', 's', 'wbr', 'bdi', 'bdo',
+  'ruby', 'rt', 'rp',
+  // 리스트
+  'ul', 'ol', 'li', 'dl', 'dt', 'dd', 'menu',
+  // 테이블
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'col', 'colgroup',
+  // 이미지 및 미디어
+  'img', 'picture', 'source', 'figure', 'figcaption', 'map', 'area',
+  // 폼 요소
+  'input', 'button', 'select', 'option', 'optgroup', 'textarea', 'label', 'output',
+  'progress', 'meter', 'datalist',
+  // 링크 및 임베드
+  'a', 'template', 'slot',
+  // 기타 유용한 태그
+  'hr', 'br', 'data', 'noembed',
+];
+
+/**
  * HTML 정제 설정
+ *
+ * 전략: 최대한 많은 태그 허용 + 보안 위험 태그만 금지
+ * - 모든 이커머스 사이트의 다양한 태그 구조 지원
+ * - XSS 방지를 위해 script, style, iframe 등만 제거
  */
 const SANITIZE_CONFIG = {
-  // 허용할 태그 목록
-  ALLOWED_TAGS: [
-    // 구조 태그
-    'div',
-    'section',
-    'article',
-    'main',
-    'aside',
-    'header',
-    'footer',
-    'nav',
-    // 텍스트 태그
-    'p',
-    'span',
-    'h1',
-    'h2',
-    'h3',
-    'h4',
-    'h5',
-    'h6',
-    'strong',
-    'em',
-    'b',
-    'i',
-    'u',
-    'mark',
-    'small',
-    'del',
-    'ins',
-    'sub',
-    'sup',
-    'blockquote',
-    'pre',
-    'code',
-    // 리스트
-    'ul',
-    'ol',
-    'li',
-    'dl',
-    'dt',
-    'dd',
-    // 테이블
-    'table',
-    'thead',
-    'tbody',
-    'tfoot',
-    'tr',
-    'th',
-    'td',
-    'caption',
-    // 이미지 및 미디어
-    'img',
-    'picture',
-    'source',
-    'figure',
-    'figcaption',
-    // 링크
-    'a',
-    // 기타
-    'label',
-    'time',
-    'address',
+  // 허용할 태그: 거의 모든 HTML5 태그
+  ALLOWED_TAGS: ALL_HTML_TAGS,
+
+  // 금지할 태그 목록 (보안 및 불필요 요소만)
+  FORBID_TAGS: [
+    'script',   // JavaScript 실행 방지 (보안)
+    'style',    // CSS는 분석에 불필요
+    'iframe',   // 외부 프레임 제거 (보안)
+    'object',   // Flash 등 레거시 플러그인 (보안)
+    'embed',    // 외부 콘텐츠 삽입 (보안)
+    'applet',   // Java 애플릿 (보안)
+    'link',     // 외부 리소스 링크
+    'meta',     // 메타 태그
+    'base',     // Base URL
+    'noscript', // JavaScript 비활성화 시 메시지
   ],
 
-  // 허용할 속성 목록
+  // 허용할 속성: class, id, data-*, src, alt 등 대부분 허용
   ALLOWED_ATTR: [
-    'class',
-    'id',
-    'src',
-    'alt',
-    'href',
-    'title',
-    'data-*', // data 속성 허용
-    'srcset',
-    'sizes',
-    'width',
-    'height',
-    'loading',
+    'class', 'id', 'name', 'type', 'value', 'placeholder',
+    'src', 'alt', 'href', 'title',
+    'data-*', 'aria-*', 'role',
+    'srcset', 'sizes', 'width', 'height', 'loading',
+    'colspan', 'rowspan', 'headers', 'scope',
+    'for', 'form', 'action', 'method',
+    'selected', 'checked', 'disabled', 'readonly', 'required',
+    'min', 'max', 'step', 'pattern', 'maxlength', 'minlength',
+    'target', 'rel', 'download',
   ],
 
-  // 요소 내용은 유지
+  // 금지할 속성 목록 (보안 관련 이벤트 핸들러만)
+  FORBID_ATTR: [
+    'onclick', 'onload', 'onerror', 'onmouseover', 'onmouseout',
+    'onkeydown', 'onkeyup', 'onfocus', 'onblur', 'onchange',
+    'onsubmit', 'onreset', 'oninput', 'oninvalid', 'onselect',
+    'ondblclick', 'onmousedown', 'onmouseup', 'onmousemove',
+    'onwheel', 'ondrag', 'ondrop', 'oncopy', 'onpaste',
+  ],
+
+  // 요소 내용은 유지 (태그는 제거해도 텍스트는 보존)
   KEEP_CONTENT: true,
 
   // 상대 URL을 절대 URL로 변환하지 않음 (Agent에서 처리)
