@@ -1,71 +1,50 @@
-"""페이지 검증 노드 - LLM을 사용하여 페이지가 제품 분석에 적합한지 검증"""
-
-from datetime import datetime
-from pathlib import Path
+"""페이지 검증 노드 - LLM을 사용하여 texts CSV로 페이지가 제품 분석에 적합한지 검증"""
 
 from src.config.base import BaseSettings
 from src.prompts import validate_page
 from src.prompts.validate_page import ValidationResult
-from src.utils.html_parser import HTMLContentExtractor
 from src.utils.llm.client import LLMClient
 from src.utils.logger import get_logger
 
-from ..state import ParsedContent, SummarizePageState
+from ..state import SummarizePageState
 
 logger = get_logger(__name__)
 settings = BaseSettings()
 
-# logs 디렉토리 경로 (agent/logs/)
-LOGS_DIR = Path(__file__).parent.parent.parent.parent.parent / "logs"
-LOGS_DIR.mkdir(exist_ok=True)
-
 
 async def validate_page_node(state: SummarizePageState) -> dict:
     """
-    페이지가 제품 분석에 적합한지 검증하는 노드 (검증 전용)
+    페이지가 제품 분석에 적합한지 검증하는 노드 (CSV 입력 방식)
 
-    1. LLM으로 페이지 검증 (is_valid, error_message만 반환)
-    2. 유효한 경우, HTMLContentExtractor로 texts와 images 추출
-    3. ParsedContent에 저장하여 다음 노드로 전달
+    parse_content_node에서 추출된 texts를 CSV 형식으로 LLM에 전달하여
+    단일 제품 상세 페이지인지 검증합니다.
 
     Args:
-        state: SummarizePageState
+        state: SummarizePageState (parsed_content 필요)
 
     Returns:
-        dict: is_valid_page, validation_error, parsed_content 업데이트
+        dict: is_valid_page, validation_error 업데이트
     """
     try:
         url = state["url"]
         title = state["title"]
-        html_body = state["html_body"]
+        parsed_content = state.get("parsed_content", {})
+        texts = parsed_content.get("texts", [])
 
         logger.info(f"━━━ Validate Page Node ━━━")
         logger.info(f"  URL: {url}")
-        logger.info(f"  HTML body length: {len(html_body)} chars")
-
-        # 디버깅: Readability로 추출된 HTML을 logs/YYYY-MM-DD/parsed.html에 저장
-        today = datetime.now().strftime("%Y-%m-%d")
-        date_dir = LOGS_DIR / today
-        date_dir.mkdir(exist_ok=True)
-
-        parsed_html_path = date_dir / "parsed.html"
-        with open(parsed_html_path, "w", encoding="utf-8") as f:
-            f.write(f"<!-- URL: {url} -->\n")
-            f.write(f"<!-- Title: {title} -->\n")
-            f.write(f"<!-- Timestamp: {datetime.now().isoformat()} -->\n\n")
-            f.write(html_body)
-        logger.info(f"  Saved parsed HTML to: {parsed_html_path}")
+        logger.info(f"  Input: {len(texts)} texts")
 
         # 입력 데이터 검증
-        if not html_body or len(html_body.strip()) < 100:
-            logger.warning("  HTML body too short or empty, marking as invalid")
+        if not texts or len(texts) < 3:
+            logger.warning("  Too few texts, marking as invalid")
             return {
                 "is_valid_page": False,
                 "validation_error": "제품 정보를 찾을 수 없습니다",
             }
 
-        # 1. LLM으로 페이지 검증
-        messages = validate_page.build_messages(url, title, html_body)
+        # LLM으로 페이지 검증 (CSV 입력)
+        messages = validate_page.build_messages(url, title, texts)
 
         llm_client = LLMClient(
             provider=settings.default_llm_provider,
@@ -86,40 +65,10 @@ async def validate_page_node(state: SummarizePageState) -> dict:
 
         if not result.is_valid:
             logger.info(f"  Error Message: {result.error_message}")
-            return {
-                "is_valid_page": False,
-                "validation_error": result.error_message,
-            }
-
-        # 2. 유효한 경우: HTMLContentExtractor로 texts와 images 추출
-        logger.info("  Extracting texts and images using HTMLContentExtractor...")
-
-        texts = HTMLContentExtractor.extract_texts(
-            html_body=html_body,
-            min_length=10,
-            base_url=url,
-        )
-
-        images = HTMLContentExtractor.extract_images(
-            html_body=html_body,
-            base_url=url,
-            min_width=100,
-            min_height=100,
-        )
-
-        logger.info(f"  Extracted: {len(texts)} texts, {len(images)} images")
-
-        # 3. ParsedContent 구성
-        parsed_content = ParsedContent(
-            domain_type="generic",
-            texts=texts,
-        )
 
         return {
-            "is_valid_page": True,
-            "validation_error": "",
-            "parsed_content": parsed_content,
-            "images": images,  # State에 images 직접 저장
+            "is_valid_page": result.is_valid,
+            "validation_error": result.error_message if not result.is_valid else "",
         }
 
     except Exception as e:

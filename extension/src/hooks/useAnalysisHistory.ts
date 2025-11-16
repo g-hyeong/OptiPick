@@ -11,7 +11,65 @@ export interface AnalysisHistoryItem {
   criteria?: string[];
   userPriorities?: string[];
   reportData?: ComparisonReportData;
+  isFavorite?: boolean;
 }
+
+// 정렬 옵션 타입
+export type SortOption = 'date-desc' | 'date-asc' | 'count-desc' | 'count-asc' | 'category-asc';
+
+// 정렬 함수
+export const sortHistory = (items: AnalysisHistoryItem[], option: SortOption): AnalysisHistoryItem[] => {
+  const sorted = [...items];
+
+  // 즐겨찾기는 항상 상단
+  const favorites = sorted.filter(h => h.isFavorite);
+  const regular = sorted.filter(h => !h.isFavorite);
+
+  const sortFn = (list: AnalysisHistoryItem[]) => {
+    switch (option) {
+      case 'date-desc':
+        return list.sort((a, b) => b.date - a.date);
+      case 'date-asc':
+        return list.sort((a, b) => a.date - b.date);
+      case 'count-desc':
+        return list.sort((a, b) => b.productCount - a.productCount);
+      case 'count-asc':
+        return list.sort((a, b) => a.productCount - b.productCount);
+      case 'category-asc':
+        return list.sort((a, b) => a.category.localeCompare(b.category, 'ko'));
+      default:
+        return list;
+    }
+  };
+
+  return [...sortFn(favorites), ...sortFn(regular)];
+};
+
+// 필터 함수
+export const filterHistory = (
+  items: AnalysisHistoryItem[],
+  categoryFilter: string | null,
+  favoritesOnly: boolean,
+  searchQuery: string
+): AnalysisHistoryItem[] => {
+  let filtered = items;
+
+  if (categoryFilter) {
+    filtered = filtered.filter(h => h.category === categoryFilter);
+  }
+
+  if (favoritesOnly) {
+    filtered = filtered.filter(h => h.isFavorite);
+  }
+
+  if (searchQuery) {
+    filtered = filtered.filter(h =>
+      h.category.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }
+
+  return filtered;
+};
 
 /**
  * 분석 결과 히스토리 관리 Hook
@@ -25,7 +83,21 @@ export function useAnalysisHistory() {
     try {
       setLoading(true);
       const result = await chrome.storage.local.get("analysisHistory");
-      setHistory(result.analysisHistory || []);
+      const items = result.analysisHistory || [];
+
+      // isFavorite 필드 없으면 false 추가 (마이그레이션)
+      const migrated = items.map((item: AnalysisHistoryItem) => ({
+        ...item,
+        isFavorite: item.isFavorite ?? false,
+      }));
+
+      // 필요 시 Storage 업데이트
+      if (items.some((item: AnalysisHistoryItem) => item.isFavorite === undefined)) {
+        await chrome.storage.local.set({ analysisHistory: migrated });
+        console.log("[useAnalysisHistory] Migrated history with isFavorite field");
+      }
+
+      setHistory(migrated);
     } catch (error) {
       console.error("[useAnalysisHistory] Failed to load history:", error);
       setHistory([]);
@@ -103,6 +175,29 @@ export function useAnalysisHistory() {
     }
   }, []);
 
+  // 즐겨찾기 토글
+  const toggleFavorite = useCallback(async (id: string) => {
+    try {
+      // Storage에서 최신 히스토리를 읽어옴
+      const result = await chrome.storage.local.get("analysisHistory");
+      const currentHistory = result.analysisHistory || [];
+
+      const updated = currentHistory.map((item: AnalysisHistoryItem) =>
+        item.id === id ? { ...item, isFavorite: !item.isFavorite } : item
+      );
+
+      // Storage에 저장
+      await chrome.storage.local.set({ analysisHistory: updated });
+      console.log("[useAnalysisHistory] Favorite toggled for:", id);
+
+      // State 업데이트
+      setHistory(updated);
+    } catch (error) {
+      console.error("[useAnalysisHistory] Failed to toggle favorite:", error);
+      throw error;
+    }
+  }, []);
+
   // 초기 로드
   useEffect(() => {
     loadHistory();
@@ -131,6 +226,7 @@ export function useAnalysisHistory() {
     getHistoryItem,
     getHistoryByCategory,
     deleteHistoryItem,
+    toggleFavorite,
     reload: loadHistory,
   };
 }

@@ -23,6 +23,28 @@ function generateUUID(): string {
 }
 
 /**
+ * URL 정규화 (쿼리 파라미터 제거)
+ */
+function normalizeUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return `${urlObj.origin}${urlObj.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * URL 기반 중복 제품 검색
+ */
+async function findDuplicateProduct(url: string): Promise<StoredProduct | null> {
+  const normalizedUrl = normalizeUrl(url);
+  const products = await getProducts();
+
+  return products.find((p) => normalizeUrl(p.url) === normalizedUrl) || null;
+}
+
+/**
  * 현재 작업 상태 저장
  */
 async function saveTaskState(task: AnalysisTask | null): Promise<void> {
@@ -145,6 +167,29 @@ async function executeAnalysisTask(
     // 2. 콘텐츠 추출
     const content = await extractContentFromTab(tabId);
 
+    // 3. 중복 체크
+    const duplicateProduct = await findDuplicateProduct(content.url);
+
+    if (duplicateProduct) {
+      // 중복 발견: 사용자 선택 대기 상태로 전환
+      // duplicateProduct와 extractedContent를 별도 Storage 키에 저장
+      await chrome.storage.local.set({
+        duplicateCheckData: {
+          duplicateProduct,
+          extractedContent: content,
+        }
+      });
+
+      await updateTaskState({
+        url: content.url,
+        title: content.title,
+        status: 'waiting_duplicate_choice' as any,
+        message: '중복된 제품이 발견되었습니다. 어떻게 하시겠습니까?',
+      });
+      // 여기서 대기 (메시지 핸들러에서 계속 진행)
+      return;
+    }
+
     await updateTaskState({
       url: content.url,
       title: content.title,
@@ -152,7 +197,7 @@ async function executeAnalysisTask(
       message: '제품을 분석하고 있습니다...',
     });
 
-    // 3. 제품 분석
+    // 4. 제품 분석
     const analysisResult = await analyzeProduct(content);
 
     await updateTaskState({
@@ -454,6 +499,132 @@ async function continueComparisonStep2(
 }
 
 /**
+ * 중복 제품 선택 처리
+ */
+async function handleDuplicateChoice(
+  choice: 'update' | 'save_new' | 'cancel'
+): Promise<void> {
+  try {
+    const currentTask = await getTaskState();
+    if (!currentTask || currentTask.status !== ('waiting_duplicate_choice' as any)) {
+      throw new Error('중복 선택 대기 중인 작업이 없습니다.');
+    }
+
+    const content = (currentTask as any).extractedContent;
+    const duplicateProduct = (currentTask as any).duplicateProduct;
+
+    if (choice === 'cancel') {
+      // 취소: 작업 취소
+      await updateTaskState({
+        status: 'failed',
+        message: '사용자가 취소했습니다.',
+        completedAt: Date.now(),
+      });
+
+      setTimeout(async () => {
+        await saveTaskState(null);
+      }, 3000);
+      return;
+    }
+
+    // 제품 분석
+    await updateTaskState({
+      status: 'analyzing',
+      message: '제품을 분석하고 있습니다...',
+    });
+
+    const analysisResult = await analyzeProduct(content);
+
+    if (choice === 'update') {
+      // 업데이트: 기존 제품 정보 갱신
+      await updateTaskState({
+        status: 'saving',
+        message: '기존 제품을 업데이트하고 있습니다...',
+      });
+
+      const updatedProduct: StoredProduct = {
+        ...duplicateProduct,
+        title: content.title,
+        price: analysisResult.product_analysis.price,
+        summary: analysisResult.product_analysis.summary,
+        thumbnailUrl: analysisResult.valid_images[0]?.src,
+        fullAnalysis: analysisResult.product_analysis,
+        extractedAt: Date.now(), // 추출 날짜 갱신
+      };
+
+      // Storage에서 제품 업데이트
+      const products = await getProducts();
+      const updatedProducts = products.map((p) =>
+        p.id === duplicateProduct.id ? updatedProduct : p
+      );
+      await chrome.storage.local.set({ products: updatedProducts });
+
+      await updateTaskState({
+        status: 'completed',
+        message: `제품 정보가 업데이트되었습니다: "${analysisResult.product_analysis.product_name}"`,
+        completedAt: Date.now(),
+      });
+
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon-128.png',
+        title: '제품 업데이트 완료',
+        message: `"${analysisResult.product_analysis.product_name}" 제품이 업데이트되었습니다.`,
+      });
+    } else if (choice === 'save_new') {
+      // 새로 저장: 새 제품으로 추가
+      await updateTaskState({
+        status: 'saving',
+        message: '새 제품으로 저장하고 있습니다...',
+      });
+
+      const product: Omit<StoredProduct, 'id' | 'addedAt'> = {
+        category: currentTask.category,
+        url: content.url,
+        title: content.title,
+        price: analysisResult.product_analysis.price,
+        summary: analysisResult.product_analysis.summary,
+        thumbnailUrl: analysisResult.valid_images[0]?.src,
+        fullAnalysis: analysisResult.product_analysis,
+      };
+
+      await saveProduct(product);
+
+      await updateTaskState({
+        status: 'completed',
+        message: `새 제품으로 저장되었습니다: "${analysisResult.product_analysis.product_name}"`,
+        completedAt: Date.now(),
+      });
+
+      await chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon-128.png',
+        title: '제품 저장 완료',
+        message: `"${analysisResult.product_analysis.product_name}" 제품이 저장되었습니다.`,
+      });
+    }
+
+    // 3초 후 작업 상태 초기화
+    setTimeout(async () => {
+      await saveTaskState(null);
+    }, 3000);
+  } catch (error) {
+    console.error('중복 선택 처리 실패:', error);
+
+    await updateTaskState({
+      status: 'failed',
+      message: '처리 실패',
+      error: error instanceof Error ? error.message : '알 수 없는 오류',
+      completedAt: Date.now(),
+    });
+
+    setTimeout(async () => {
+      await saveTaskState(null);
+    }, 5000);
+  }
+}
+
+/**
  * 메시지 리스너
  */
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -484,6 +655,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       })
       .catch((error) => {
         sendResponse({ success: false, error: error.message });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'DUPLICATE_CHOICE') {
+    const { choice } = message;
+
+    handleDuplicateChoice(choice)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : '알 수 없는 오류',
+        });
       });
 
     return true;

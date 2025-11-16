@@ -1,13 +1,20 @@
+import { useState } from "react";
 import { useApp } from "@/context";
 import { useProductsContext } from "@/context";
 import { useAnalysisHistory } from "@/hooks";
-import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/utils";
+import { CategoryItem } from "./CategoryItem";
+import { ComparisonDialog } from "@/components/ui/ComparisonDialog";
 
 export function Sidebar() {
   const { state, setCurrentPage, setSelectedCategory } = useApp();
-  const { allCategories, products } = useProductsContext();
+  const { allCategories, products, renameCategory, deleteCategory } = useProductsContext();
   const { history } = useAnalysisHistory();
+
+  // ComparisonDialog 상태
+  const [comparisonDialogOpen, setComparisonDialogOpen] = useState(false);
+  const [comparisonCategory, setComparisonCategory] = useState("");
+  const [comparisonProductIds, setComparisonProductIds] = useState<string[]>([]);
 
   const handleCategoryClick = (category: string) => {
     setSelectedCategory(category);
@@ -17,6 +24,19 @@ export function Sidebar() {
   const handleHistoryClick = async (historyId: string) => {
     const url = chrome.runtime.getURL(`src/compare-report/index.html?historyId=${historyId}`);
     await chrome.tabs.create({ url });
+  };
+
+  const handleCompare = (category: string) => {
+    const categoryProducts = products.filter((p) => p.category === category);
+
+    if (categoryProducts.length < 2) {
+      alert("비교하려면 최소 2개 이상의 제품이 필요합니다");
+      return;
+    }
+
+    setComparisonCategory(category);
+    setComparisonProductIds(categoryProducts.map((p) => p.id));
+    setComparisonDialogOpen(true);
   };
 
   return (
@@ -40,29 +60,16 @@ export function Sidebar() {
                 const isSelected = state.selectedCategory === category;
 
                 return (
-                  <button
+                  <CategoryItem
                     key={category}
-                    onClick={() => handleCategoryClick(category)}
-                    className={cn(
-                      "w-full text-left px-3 py-2 rounded-md text-sm transition-colors",
-                      "flex items-center justify-between gap-2",
-                      isSelected
-                        ? "bg-primary-500 text-white"
-                        : "text-primary-700 hover:bg-warm-100"
-                    )}
-                  >
-                    <span className="truncate min-w-0 flex-1">{category}</span>
-                    <span
-                      className={cn(
-                        "text-xs px-2 py-0.5 rounded-full flex-shrink-0",
-                        isSelected
-                          ? "bg-white/20 text-white"
-                          : "bg-primary-100 text-primary-600"
-                      )}
-                    >
-                      {count}
-                    </span>
-                  </button>
+                    category={category}
+                    count={count}
+                    isSelected={isSelected}
+                    onSelect={() => handleCategoryClick(category)}
+                    onRename={renameCategory}
+                    onDelete={deleteCategory}
+                    onCompare={handleCompare}
+                  />
                 );
               })}
             </div>
@@ -84,9 +91,12 @@ export function Sidebar() {
                 >
                   <div className="flex items-start justify-between gap-2 overflow-hidden">
                     <div className="flex-1 min-w-0 overflow-hidden">
-                      <p className="text-sm font-medium text-primary-800 truncate">
-                        {item.category}
-                      </p>
+                      <div className="flex items-center gap-1">
+                        {item.isFavorite && <span className="text-yellow-500 text-sm">⭐</span>}
+                        <p className="text-sm font-medium text-primary-800 truncate">
+                          {item.category}
+                        </p>
+                      </div>
                       <p className="text-xs text-primary-600">
                         {item.productCount}개 제품
                       </p>
@@ -101,6 +111,16 @@ export function Sidebar() {
           )}
         </div>
       </div>
+
+      {/* ComparisonDialog */}
+      {comparisonDialogOpen && (
+        <ComparisonDialog
+          open={comparisonDialogOpen}
+          onClose={() => setComparisonDialogOpen(false)}
+          category={comparisonCategory}
+          productIds={comparisonProductIds}
+        />
+      )}
     </div>
   );
 }

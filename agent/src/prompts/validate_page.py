@@ -39,11 +39,13 @@ SYSTEM_PROMPT = """
 당신은 웹 페이지 콘텐츠를 분석하여, 해당 페이지가 **단일 제품 상세 페이지**인지 판단하는 검증 전문가입니다.
 
 ## CONTEXT:
-사용자로부터 웹 페이지의 HTML을 입력받습니다. 당신의 임무는:
+사용자로부터 웹 페이지에서 추출된 텍스트 데이터를 CSV 형식으로 입력받습니다.
+각 텍스트는 tag(HTML 태그명), text(내용), position(순서)로 구성됩니다.
+당신의 임무는:
 - 이 페이지가 제품 분석에 적합한지 검증
 
 ## TASK:
-입력된 페이지 콘텐츠를 분석하여, 단일 제품 상세 페이지인지 판단합니다.
+입력된 CSV 텍스트 데이터를 분석하여, 단일 제품 상세 페이지인지 판단합니다.
 
 ## OUTPUT FORMAT:
 
@@ -148,29 +150,47 @@ SYSTEM_PROMPT = """
 # ============================================================================
 
 
-def build_messages(url: str, title: str, html_body: str) -> list:
+def build_messages(url: str, title: str, texts: list) -> list:
     """
-    페이지 검증을 위한 LLM 메시지 구성
+    페이지 검증을 위한 LLM 메시지 구성 (CSV 입력)
 
     Args:
         url: 페이지 URL
         title: 페이지 제목
-        html_body: Readability로 정제된 HTML (메인 콘텐츠만 포함)
+        texts: 추출된 텍스트 리스트 (ExtractedText TypedDict)
 
     Returns:
         list: LLM에 전달할 메시지 목록
     """
+    # texts를 CSV 형식으로 변환
+    csv_lines = ["tag,text,position"]
+
+    for text in texts:
+        tag = text.get("tagName", "").strip()
+        content = text.get("content", "").strip()
+        position = text.get("position", 0)
+
+        if content:
+            # CSV 이스케이핑: 쉼표, 줄바꿈, 따옴표 처리
+            if "," in content or "\n" in content or '"' in content:
+                content = '"' + content.replace('"', '""') + '"'
+            csv_lines.append(f"{tag},{content},{position}")
+
+    texts_csv = "\n".join(csv_lines)
+
     # 사용자 메시지 구성
-    user_message = f"""아래 웹 페이지의 콘텐츠를 분석하여, 이 페이지가 단일 제품 상세 페이지인지 검증하고, 유효한 경우 메인 제품 정보를 추출해주세요.
+    user_message = f"""아래 웹 페이지의 텍스트 정보를 분석하여, 이 페이지가 단일 제품 상세 페이지인지 검증해주세요.
 
 # 페이지 정보:
 - URL: {url}
 - 제목: {title}
 
-# 페이지 HTML (Readability로 정제됨):
-{html_body}
+# 페이지 텍스트 (CSV format):
+```csv
+{texts_csv}
+```
 
-위 정보를 바탕으로 검증 및 파싱 결과를 JSON 형식으로 반환해주세요."""
+위 CSV 데이터를 바탕으로 이 페이지가 단일 제품 상세 페이지인지 검증 결과를 JSON 형식으로 반환해주세요."""
 
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

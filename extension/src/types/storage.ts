@@ -22,6 +22,10 @@ export interface StoredProduct {
   fullAnalysis: ProductAnalysis;
   /** 저장 시각 (Unix timestamp) */
   addedAt: number;
+  /** 사용자 메모 */
+  notes?: string;
+  /** 사용자 태그 */
+  tags?: string[];
 }
 
 /**
@@ -123,4 +127,24 @@ export interface ComparisonTask {
  */
 export interface ComparisonTaskStorage {
   currentComparisonTask: ComparisonTask | null;
+}
+
+// ========== 비교 템플릿 관련 타입 ==========
+
+/**
+ * 비교 템플릿
+ */
+export interface ComparisonTemplate {
+  /** 템플릿 ID */
+  id: string;
+  /** 템플릿 이름 */
+  name: string;
+  /** 카테고리 (선택사항) */
+  category?: string;
+  /** 우선순위 목록 */
+  priorities: string[];
+  /** 생성 시각 */
+  createdAt: number;
+  /** 수정 시각 */
+  updatedAt: number;
 }

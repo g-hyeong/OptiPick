@@ -12,15 +12,12 @@ from ..graphs.summarize_page.state import ExtractedText, ExtractedImage
 
 
 class HTMLContentExtractor:
-    """HTML에서 텍스트와 이미지를 추출하는 유틸리티 클래스"""
+    """HTML에서 텍스트와 이미지를 추출하는 유틸리티 클래스
 
-    # Extension의 textParser.ts TEXT_TAGS와 동일
-    TEXT_TAGS = [
-        'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'span', 'div', 'article', 'section',
-        'li', 'td', 'th', 'blockquote', 'pre',
-        'code', 'label', 'a',
-    ]
+    텍스트 추출: CSS Selector를 사용한 Leaf Node 방식
+    - 태그 하드코딩 불필요 (자동으로 모든 태그 처리)
+    - 부모-자식 중복 자동 방지
+    """
 
     # Extension의 textFilter.ts DEFAULT_EXCLUDE_TAGS와 동일
     EXCLUDE_TAGS = [
@@ -43,11 +40,16 @@ class HTMLContentExtractor:
         min_length: int = 10,
         base_url: str = ""
     ) -> List[ExtractedText]:
-        """HTML body에서 텍스트 추출 (Extension의 textParser.ts 로직 이식)
+        """HTML body에서 텍스트 추출 - Leaf Node 방식
 
-        중복 제거: 부모-자식 태그에서 동일한 텍스트가 반복 추출되는 것을 방지하기 위해
-        이미 추출된 텍스트 내용을 추적하여 중복을 제거합니다.
-        (BeautifulSoup best practice - content-based deduplication)
+        CSS Selector ':not(:has(*))'를 사용하여 자식 태그가 없는 요소(leaf node)만 추출.
+        부모-자식 중복을 자동으로 방지하며, 태그 하드코딩이 불필요합니다.
+        (BeautifulSoup best practice - 2024)
+
+        동작 원리:
+        - <div><p><span>텍스트</span></p></div> 구조에서
+        - span만 추출 (p, div는 자식이 있으므로 제외)
+        - 구조적으로 중복 불가능
 
         Args:
             html_body: 정제된 HTML body 문자열
@@ -59,48 +61,42 @@ class HTMLContentExtractor:
         """
         soup = BeautifulSoup(html_body, 'lxml')
         texts: List[ExtractedText] = []
-        processed_elements = set()
-        seen_texts = set()  # 텍스트 내용 기반 중복 제거
+        seen_texts = set()  # 텍스트 내용 기반 중복 제거 (안전장치)
         position = 0
 
-        for tag_name in HTMLContentExtractor.TEXT_TAGS:
-            elements = soup.find_all(tag_name)
+        # CSS Selector로 leaf node만 선택 (자식 태그가 없는 요소)
+        leaf_elements = soup.select("*:not(:has(*))")
 
-            for element in elements:
-                # 이미 처리된 요소는 건너뛰기
-                if id(element) in processed_elements:
-                    continue
+        for element in leaf_elements:
+            # 추출 대상인지 확인
+            if not HTMLContentExtractor._should_extract_text(element):
+                continue
 
-                # 추출 대상인지 확인
-                if not HTMLContentExtractor._should_extract_text(element):
-                    continue
+            # 텍스트 추출
+            text_content = element.get_text(strip=True)
+            if not text_content:
+                continue
 
-                # 자식 요소 포함한 전체 텍스트 추출 (가격 정보 등을 놓치지 않기 위함)
-                text_content = element.get_text(strip=True)
-                if not text_content:
-                    continue
+            # 텍스트 유효성 검사
+            if not HTMLContentExtractor._is_valid_text(text_content, min_length):
+                continue
 
-                # 텍스트 유효성 검사
-                if not HTMLContentExtractor._is_valid_text(text_content, min_length):
-                    continue
+            # 텍스트 정리
+            cleaned_text = HTMLContentExtractor._clean_text(text_content)
 
-                # 텍스트 정리
-                cleaned_text = HTMLContentExtractor._clean_text(text_content)
+            # 중복 텍스트 제거 (안전장치)
+            if cleaned_text in seen_texts:
+                continue
 
-                # 중복 텍스트 제거 (부모-자식 태그 중복 방지)
-                if cleaned_text in seen_texts:
-                    continue
+            # 텍스트 추가
+            texts.append(ExtractedText(
+                content=cleaned_text,
+                tagName=element.name,
+                position=position
+            ))
 
-                # 텍스트 추가
-                texts.append(ExtractedText(
-                    content=cleaned_text,
-                    tagName=element.name,
-                    position=position
-                ))
-
-                processed_elements.add(id(element))
-                seen_texts.add(cleaned_text)
-                position += 100  # DOM 순서 기반 position
+            seen_texts.add(cleaned_text)
+            position += 100  # DOM 순서 기반 position
 
         return texts
 

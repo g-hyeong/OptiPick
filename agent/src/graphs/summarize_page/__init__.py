@@ -7,6 +7,7 @@ from .nodes import (
     analyze_product_node,
     domain_parser_node,
     ocr_node,
+    parse_content_node,
     validate_page_node,
 )
 from .state import SummarizePageState
@@ -60,12 +61,13 @@ def create_graph() -> StateGraph:
     1. START -> route: 도메인 체크
     2. route -> (조건부 분기)
         - 특정 도메인 (쿠팡, 네이버 등) -> domain_parser (검증 + 파싱)
-        - 일반 페이지 -> validation (검증 + 파싱)
-    3. domain_parser/validation -> (조건부)
+        - 일반 페이지 -> parse_content (HTML 파싱)
+    3. parse_content -> validate_page (CSV 검증)
+    4. validation/domain_parser -> (조건부)
         - 검증 실패 -> END
         - 검증 성공 -> ocr
-    4. ocr -> analyze_product: 이미지 OCR 수행
-    5. analyze_product -> END: 제품 정보 분석
+    5. ocr -> analyze_product: 이미지 OCR 수행
+    6. analyze_product -> END: 제품 정보 분석
 
     Returns:
         StateGraph: 컴파일된 그래프
@@ -75,6 +77,7 @@ def create_graph() -> StateGraph:
 
     # 노드 추가
     workflow.add_node("route", route_node)
+    workflow.add_node("parse_content", parse_content_node)
     workflow.add_node("validate_page", validate_page_node)
     workflow.add_node("domain_parser", domain_parser_node)
     workflow.add_node("ocr", ocr_node)
@@ -89,11 +92,14 @@ def create_graph() -> StateGraph:
         route_by_domain,
         {
             "domain_specific": "domain_parser",
-            "generic": "validate_page",
+            "generic": "parse_content",
         },
     )
 
-    # 2. validation 후 조건부 분기
+    # 2. parse_content -> validate_page (일반 경로)
+    workflow.add_edge("parse_content", "validate_page")
+
+    # 3. validation 후 조건부 분기
     workflow.add_conditional_edges(
         "validate_page",
         should_continue_after_parsing,
@@ -103,7 +109,7 @@ def create_graph() -> StateGraph:
         },
     )
 
-    # 3. domain_parser 후 조건부 분기
+    # 4. domain_parser 후 조건부 분기
     workflow.add_conditional_edges(
         "domain_parser",
         should_continue_after_parsing,

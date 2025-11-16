@@ -7,6 +7,9 @@ import { Chip } from "./Chip";
 import { useComparisonTask } from "@/hooks/useComparisonTask";
 import { useProducts } from "@/hooks/useProducts";
 import { useAnalysisHistory } from "@/hooks/useAnalysisHistory";
+import { useTemplates } from "@/hooks/useTemplates";
+import { TemplateDialog } from "./TemplateDialog";
+import type { ComparisonTemplate } from "@/types/storage";
 
 interface ComparisonDialogProps {
   open: boolean;
@@ -30,6 +33,7 @@ export function ComparisonDialog({
 
   const { products } = useProducts();
   const { addHistoryItem } = useAnalysisHistory();
+  const { templates, addTemplate } = useTemplates();
 
   // Step 1: 사용자 기준 입력
   const [criteriaInput, setCriteriaInput] = useState("");
@@ -37,6 +41,10 @@ export function ComparisonDialog({
 
   // Step 2: 우선순위 선택
   const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
+
+  // 템플릿 관련
+  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [templateDialogMode, setTemplateDialogMode] = useState<'save' | 'select'>('select');
 
   // 로딩 상태
   const [isSubmittingCriteria, setIsSubmittingCriteria] = useState(false);
@@ -177,6 +185,23 @@ export function ComparisonDialog({
     }
   };
 
+  // 템플릿 선택 핸들러
+  const handleSelectTemplate = (template: ComparisonTemplate) => {
+    // 템플릿의 우선순위를 기준 목록으로 설정
+    setCriteriaList(template.priorities);
+    setShowTemplateDialog(false);
+  };
+
+  // 템플릿 저장 핸들러
+  const handleSaveAsTemplate = async (template: Omit<ComparisonTemplate, "id" | "createdAt" | "updatedAt">) => {
+    try {
+      await addTemplate(template);
+      alert("템플릿이 저장되었습니다");
+    } catch (error) {
+      alert("템플릿 저장에 실패했습니다");
+    }
+  };
+
   // 현재 단계 렌더링
   const renderContent = () => {
     if (!task) {
@@ -267,6 +292,21 @@ export function ComparisonDialog({
               <br />
               예: 성능, 가격, 배터리, 디자인, 무게
             </p>
+
+            {/* 템플릿 불러오기 버튼 */}
+            {templates.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setTemplateDialogMode('select');
+                  setShowTemplateDialog(true);
+                }}
+                className="mb-3 w-full"
+              >
+                템플릿 불러오기 ({templates.length}개)
+              </Button>
+            )}
 
             {/* 기준 입력 */}
             <div className="flex gap-2 mb-3">
@@ -394,13 +434,28 @@ export function ComparisonDialog({
               </div>
             )}
 
-            <Button
-              onClick={handleSubmitPriorities}
-              disabled={selectedPriorities.length === 0 || isSubmittingPriorities}
-              className="w-full"
-            >
-              {isSubmittingPriorities ? "전송 중..." : `비교 시작 (${selectedPriorities.length}개 선택됨)`}
-            </Button>
+            {/* 버튼 그룹 */}
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setTemplateDialogMode('save');
+                  setShowTemplateDialog(true);
+                }}
+                disabled={selectedPriorities.length === 0}
+                className="flex-1"
+              >
+                템플릿으로 저장
+              </Button>
+              <Button
+                onClick={handleSubmitPriorities}
+                disabled={selectedPriorities.length === 0 || isSubmittingPriorities}
+                className="flex-1"
+              >
+                {isSubmittingPriorities ? "전송 중..." : `비교 시작 (${selectedPriorities.length}개)`}
+              </Button>
+            </div>
           </div>
         </div>
       );
@@ -423,13 +478,27 @@ export function ComparisonDialog({
   };
 
   return (
-    <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <ModalContent>
-        <ModalHeader>
-          <ModalTitle>{category} 제품 비교</ModalTitle>
-        </ModalHeader>
-        {renderContent()}
-      </ModalContent>
-    </Modal>
+    <>
+      <Modal open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+        <ModalContent>
+          <ModalHeader>
+            <ModalTitle>{category} 제품 비교</ModalTitle>
+          </ModalHeader>
+          {renderContent()}
+        </ModalContent>
+      </Modal>
+
+      {/* 템플릿 다이얼로그 */}
+      <TemplateDialog
+        isOpen={showTemplateDialog}
+        mode={templateDialogMode}
+        priorities={templateDialogMode === 'save' ? selectedPriorities : undefined}
+        category={category}
+        templates={templates}
+        onSave={handleSaveAsTemplate}
+        onSelect={handleSelectTemplate}
+        onClose={() => setShowTemplateDialog(false)}
+      />
+    </>
   );
 }

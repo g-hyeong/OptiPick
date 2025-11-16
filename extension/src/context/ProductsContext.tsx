@@ -7,12 +7,18 @@ interface ProductsContextType {
   products: StoredProduct[];
   loading: boolean;
   addProduct: (product: Omit<StoredProduct, "id" | "addedAt">) => Promise<StoredProduct>;
+  updateProduct: (productId: string, updates: Partial<StoredProduct>) => Promise<void>;
   deleteProduct: (productId: string) => Promise<void>;
+  deleteProducts: (productIds: string[]) => Promise<void>;
+  deleteByCategory: (category: string) => Promise<void>;
   getProductsByCategory: (category: string) => StoredProduct[];
   reload: () => Promise<void>;
   allCategories: string[];
   recentCategories: string[];
+  categoryHistory: Array<{ category: string; count: number; lastUsed: number }>;
   recordCategoryUsage: (category: string) => Promise<void>;
+  renameCategory: (oldName: string, newName: string) => Promise<void>;
+  deleteCategory: (categoryName: string) => Promise<void>;
 }
 
 const ProductsContext = createContext<ProductsContextType | undefined>(undefined);
