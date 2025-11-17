@@ -106,21 +106,14 @@ async def continue_compare_products(
 
     사용자 입력을 받아 중단된 그래프를 재개합니다.
 
-    Case 1: 첫 번째 재개 (user_criteria 입력)
     - user_input: list[str] (예: ["배터리", "가격", "무게"])
     - analyze_products 노드 실행
-    - collect_user_priorities에서 다시 중단
-    - 추출된 criteria와 질문 반환
-
-    Case 2: 두 번째 재개 (user_priorities 입력)
-    - user_input: dict[str, int] (예: {"배터리": 1, "가격": 2})
     - generate_report 노드 실행
     - 최종 보고서 반환
 
     Returns:
-        - status: "waiting_for_priorities" | "completed"
-        - criteria: 추출된 비교 기준 (Case 1)
-        - report: 최종 보고서 (Case 2)
+        - status: "completed"
+        - report: 최종 보고서
     """
     start_time = time.time()
 
@@ -154,27 +147,18 @@ async def continue_compare_products(
             },
         )
 
-        # 사용자 입력 타입에 따라 State 업데이트 준비
+        # 사용자 입력: user_criteria (list)
         user_input = request.user_input
 
-        # Case 1: user_criteria 입력 (list)
-        if isinstance(user_input, list):
-            logger.info(f"User criteria received: {', '.join(user_input)}")
-            update_state = {"user_criteria": user_input}
-
-        # Case 2: user_priorities 입력 (dict)
-        elif isinstance(user_input, dict):
-            logger.info(f"User priorities received: {len(user_input)} criteria")
-            for criterion, priority in sorted(user_input.items(), key=lambda x: x[1]):
-                logger.info(f"  {priority}위: {criterion}")
-            update_state = {"user_priorities": user_input}
-
-        else:
+        if not isinstance(user_input, list):
             logger.error(f"Invalid user_input type: {type(user_input)}")
             raise HTTPException(
                 status_code=400,
-                detail="user_input must be list (criteria) or dict (priorities)",
+                detail="user_input must be list of criteria keywords",
             )
+
+        logger.info(f"User criteria received: {', '.join(user_input)}")
+        update_state = {"user_criteria": user_input}
 
         # 재개 전 상태 확인
         logger.info(
@@ -215,52 +199,30 @@ async def continue_compare_products(
             },
         )
 
-        # Case 1 응답: 다음 interrupt 대기 (waiting_for_priorities)
-        if new_state.next and "collect_user_priorities" in new_state.next:
-            extracted_criteria = result.get("extracted_criteria", [])
-            question = f"다음 기준의 우선순위를 입력해주세요 (1위가 가장 중요): {', '.join(extracted_criteria)}"
+        # 최종 완료 응답
+        comparison_report = result.get("comparison_report")
 
-            execution_time = time.time() - start_time
-            logger.info(
-                "Graph waiting for user priorities",
-                extra={
-                    "thread_id": thread_id,
-                    "criteria_count": len(extracted_criteria),
-                    "execution_time_seconds": round(execution_time, 2),
-                },
+        if not comparison_report:
+            logger.error("Comparison report not found in final state")
+            raise HTTPException(
+                status_code=500, detail="Failed to generate comparison report"
             )
 
-            return CompareProductsContinueResponse(
-                status="waiting_for_priorities",
-                question=question,
-                criteria=extracted_criteria,
-            )
+        execution_time = time.time() - start_time
+        logger.info(
+            "CompareProducts graph completed",
+            extra={
+                "thread_id": thread_id,
+                "total_products": comparison_report.get("total_products", 0),
+                "products_count": len(comparison_report.get("products", [])),
+                "execution_time_seconds": round(execution_time, 2),
+            },
+        )
 
-        # Case 2 응답: 최종 완료 (completed)
-        else:
-            comparison_report = result.get("comparison_report")
-
-            if not comparison_report:
-                logger.error("Comparison report not found in final state")
-                raise HTTPException(
-                    status_code=500, detail="Failed to generate comparison report"
-                )
-
-            execution_time = time.time() - start_time
-            logger.info(
-                "CompareProducts graph completed",
-                extra={
-                    "thread_id": thread_id,
-                    "total_products": comparison_report.get("total_products", 0),
-                    "products_count": len(comparison_report.get("products", [])),
-                    "execution_time_seconds": round(execution_time, 2),
-                },
-            )
-
-            return CompareProductsContinueResponse(
-                status="completed",
-                report=ComparisonReportSchema(**comparison_report),
-            )
+        return CompareProductsContinueResponse(
+            status="completed",
+            report=ComparisonReportSchema(**comparison_report),
+        )
 
     except HTTPException:
         raise

@@ -21,9 +21,8 @@ class ProductComparison(TypedDict):
     """비교 결과 내 개별 제품 정보"""
 
     product_name: str  # 제품명
-    criteria_scores: dict[str, float]  # 각 기준별 점수 (0-100)
-    strengths: list[str]  # 강점
-    weaknesses: list[str]  # 약점
+    criteria_specs: dict[str, str]  # 각 기준별 실제 스펙 값 또는 요약
+    criteria_details: dict[str, list[str]]  # 정성적 기준의 상세 정보
 
 
 class ComparisonReport(TypedDict):
@@ -32,10 +31,10 @@ class ComparisonReport(TypedDict):
     category: str  # 카테고리
     total_products: int  # 총 제품 수
     user_criteria: list[str]  # 사용자가 입력한 기준
-    user_priorities: dict[str, int]  # 사용자가 입력한 우선순위
-    products: list[ProductComparison]  # 제품 목록 (순위 없음, Extension에서 계산)
-    summary: str  # 전체 요약
-    recommendation: str  # 최종 추천 및 이유
+    unavailable_criteria: list[str]  # 추출 불가능한 사용자 기준
+    criteria_importance: dict[str, int]  # Agent가 도출한 기준의 중요도 (1-10)
+    products: list[ProductComparison]  # 제품 목록
+    summary: str  # 종합평
 
 
 class CompareProductsState(TypedDict, total=False):
@@ -46,13 +45,10 @@ class CompareProductsState(TypedDict, total=False):
     products: list[ProductAnalysis]  # 비교할 제품 목록
 
     # 1단계: 사용자가 입력한 중요 기준 키워드
-    user_criteria: list[str]  # 예: ["배터리 수명", "가격", "무게"]
+    user_criteria: list[str]  # 예: ["배터리", "가격", "무게"]
 
     # 2단계: LLM이 제품들로부터 추출한 비교 가능한 기준들
     extracted_criteria: list[str]  # LLM이 분석하여 추출한 모든 비교 기준
-
-    # 3단계: 사용자가 입력한 기준별 우선순위
-    user_priorities: dict[str, int]  # 예: {"배터리 수명": 1, "가격": 2, "무게": 3}
 
     # 최종 출력
     comparison_report: ComparisonReport  # 최종 비교 보고서

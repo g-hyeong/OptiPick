@@ -21,12 +21,12 @@ class ProductComparisonOutput(BaseModel):
     """개별 제품 비교 결과"""
 
     product_name: str = Field(..., description="제품명")
-    criteria_scores: dict[str, float] = Field(..., description="기준별 점수 (0-100)")
     criteria_specs: dict[str, str] = Field(
-        default_factory=dict, description="기준별 실제 스펙 값 (예: 'RAM: 16GB DDR5', '무게: 1.4kg')"
+        default_factory=dict, description="기준별 실제 스펙 값 또는 요약 (예: '16GB DDR5', '1.4kg', '우수함')"
     )
-    strengths: list[str] = Field(..., description="강점")
-    weaknesses: list[str] = Field(..., description="약점")
+    criteria_details: dict[str, list[str]] = Field(
+        default_factory=dict, description="정성적 기준의 상세 정보 (리뷰 코멘트 등)"
+    )
 
 
 class ComparisonReportOutput(BaseModel):
@@ -34,11 +34,15 @@ class ComparisonReportOutput(BaseModel):
 
     category: str = Field(..., description="카테고리")
     total_products: int = Field(..., description="총 제품 수")
-    user_criteria: list[str] = Field(..., description="사용자 입력 기준")
-    user_priorities: dict[str, int] = Field(..., description="사용자 우선순위")
+    user_criteria: list[str] = Field(..., description="사용자가 입력한 기준")
+    unavailable_criteria: list[str] = Field(
+        default_factory=list, description="제품 데이터에서 추출 불가능한 사용자 기준"
+    )
+    criteria_importance: dict[str, int] = Field(
+        default_factory=dict, description="Agent가 도출한 기준의 중요도 (1-10)"
+    )
     products: list[ProductComparisonOutput] = Field(..., description="제품 목록")
-    summary: str = Field(..., description="전체 요약")
-    recommendation: str = Field(..., description="최종 추천")
+    summary: str = Field(..., description="종합평")
 
 
 # ============================================================================
@@ -50,8 +54,8 @@ async def generate_report_node(state: CompareProductsState) -> dict:
     """
     최종 비교 보고서를 생성하는 노드
 
-    사용자 우선순위와 제품 데이터를 바탕으로,
-    LLM을 사용하여 사용자 맞춤형 제품 비교 보고서를 생성합니다.
+    사용자 기준과 제품 데이터를 바탕으로,
+    LLM을 사용하여 제품 비교 보고서를 생성합니다.
 
     Args:
         state: CompareProductsState
@@ -64,15 +68,16 @@ async def generate_report_node(state: CompareProductsState) -> dict:
     try:
         # State에서 데이터 추출
         category = state.get("category", "Unknown")
-        user_priorities = state.get("user_priorities", {})
-        products = state.get("products", [])
         user_criteria = state.get("user_criteria", [])
+        extracted_criteria = state.get("extracted_criteria", [])
+        products = state.get("products", [])
 
         logger.info(f"  Category: {category}")
-        logger.info(f"  User priorities: {len(user_priorities)} criteria")
+        logger.info(f"  User criteria: {len(user_criteria)} keywords")
+        logger.info(f"  Extracted criteria: {len(extracted_criteria)} criteria")
         logger.info(f"  Products to compare: {len(products)}")
 
-        if not products or not user_priorities:
+        if not products or not extracted_criteria:
             logger.error("  Insufficient data for report generation")
             return {"comparison_report": None}
 
@@ -80,12 +85,15 @@ async def generate_report_node(state: CompareProductsState) -> dict:
         llm_client = LLMClient(
             provider=settings.default_llm_provider,
             model=settings.default_llm_model,
-            temperature=0.5,  # 창의적인 설명 생성
+            temperature=0.3,  # 객관적인 스펙 추출
         )
 
         # 프롬프트 생성
         messages = build_generate_report_messages(
-            category=category, user_priorities=user_priorities, products=products
+            category=category,
+            user_criteria=user_criteria,
+            criteria=extracted_criteria,
+            products=products
         )
 
         # LLM 호출
@@ -99,24 +107,23 @@ async def generate_report_node(state: CompareProductsState) -> dict:
             "category": result.category,
             "total_products": result.total_products,
             "user_criteria": result.user_criteria,
-            "user_priorities": result.user_priorities,
+            "unavailable_criteria": result.unavailable_criteria,
+            "criteria_importance": result.criteria_importance,
             "products": [
                 {
                     "product_name": p.product_name,
-                    "criteria_scores": p.criteria_scores,
                     "criteria_specs": p.criteria_specs,
-                    "strengths": p.strengths,
-                    "weaknesses": p.weaknesses,
+                    "criteria_details": p.criteria_details,
                 }
                 for p in result.products
             ],
             "summary": result.summary,
-            "recommendation": result.recommendation,
         }
 
         # 결과 로깅
         logger.info(f"  Report generated successfully")
         logger.info(f"  Products evaluated: {len(result.products)}")
+        logger.info(f"  Unavailable criteria: {len(result.unavailable_criteria)}")
         logger.info(f"  Summary: {result.summary[:100]}...")
 
         return {"comparison_report": comparison_report}
@@ -128,10 +135,10 @@ async def generate_report_node(state: CompareProductsState) -> dict:
             "category": state.get("category", "Unknown"),
             "total_products": len(state.get("products", [])),
             "user_criteria": state.get("user_criteria", []),
-            "user_priorities": state.get("user_priorities", {}),
+            "unavailable_criteria": [],
+            "criteria_importance": {},
             "products": [],
             "summary": "Report generation failed. Please try again.",
-            "recommendation": "Unable to generate recommendation at this time.",
         }
         logger.warning("  Using fallback report")
         return {"comparison_report": fallback_report}

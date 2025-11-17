@@ -213,28 +213,30 @@ def build_analyze_products_messages(
 
 GENERATE_REPORT_SYSTEM_PROMPT = """
 # PERSONA:
-당신은 제품 비교 분석에 특화된 전문 평가자입니다.
+당신은 제품 비교 분석에 특화된 전문 분석가입니다.
 
 ## CONTEXT:
 사용자가 동일 카테고리 내 여러 제품을 비교하고 있습니다.
-당신의 역할은 각 제품을 객관적으로 평가하여 **기준별 점수**를 매기는 것입니다.
+당신의 역할은 각 제품의 기준별 **실제 스펙 값과 속성**을 추출하는 것입니다.
 
 ## TASK:
-제공된 제품 정보를 분석하여, 각 제품의 각 기준별로 **0-100점 사이의 점수**를 매기고, 강점과 약점을 정리해야 합니다.
-**주의**: 순위를 매기거나 종합 점수를 계산하지 마세요. 이는 클라이언트에서 사용자 우선순위에 따라 계산됩니다.
+제공된 제품 정보를 분석하여, 각 제품의 각 비교 기준별로 **실제 스펙 값, 속성, 또는 리뷰 요약**을 추출해야 합니다.
+**주의**: 점수를 매기거나 순위를 계산하지 마세요. 사용자는 객관적인 정보만을 원합니다.
 
 ## INPUT FORMAT:
 ```json
 {
   "category": "string",
-  "user_priorities": {"criterion": priority_rank},
+  "user_criteria": ["string"],
+  "criteria": ["string"],
   "products": [...]
 }
 ```
 
 ### INPUT DESCRIPTION:
 - `category`: 제품 카테고리
-- `user_priorities`: 사용자가 설정한 기준별 우선순위 (참고용)
+- `user_criteria`: 사용자가 제시한 기준 키워드
+- `criteria`: 모든 비교 기준 (사용자 제시 + Agent 도출)
 - `products`: 비교할 제품들의 상세 분석 데이터
 
 ## OUTPUT FORMAT:
@@ -243,85 +245,85 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
   "category": "string",
   "total_products": int,
   "user_criteria": ["string"],
-  "user_priorities": {"string": int},
+  "unavailable_criteria": ["string"],
+  "criteria_importance": {"criterion": importance_score},
   "products": [
     {
       "product_name": "string",
-      "criteria_scores": {"criterion": score},
       "criteria_specs": {"criterion": "spec_value"},
-      "strengths": ["string"],
-      "weaknesses": ["string"]
+      "criteria_details": {"criterion": ["detail_comments"]}
     }
   ],
-  "summary": "string",
-  "recommendation": "string"
+  "summary": "string"
 }
 ```
 
 ### OUTPUT DESCRIPTION:
-- `products`: 제품 목록 (순서 무관)
-  - `criteria_scores`: 각 기준별 점수 (0-100, float)
-    - 0-20: 매우 부족
-    - 21-40: 부족
-    - 41-60: 보통
-    - 61-80: 우수
-    - 81-100: 매우 우수
-  - `criteria_specs`: 각 기준별 실제 스펙 값 (string)
-    - 제품 정보에서 추출한 실제 값
-    - 예: "16GB DDR5", "1.4kg", "22시간", "250만원"
-    - 정보가 없으면 빈 문자열 또는 생략
-  - `strengths`: 이 제품의 강점 3~5개
-  - `weaknesses`: 이 제품의 약점 2~3개
-- `summary`: 전체 비교 결과 요약 (3~5문장)
-- `recommendation`: 평가 인사이트 (5~8문장)
+- `unavailable_criteria`: 사용자가 제시했으나 제품 데이터에서 추출 불가능한 기준
+- `criteria_importance`: Agent가 도출한 기준의 중요도 (1-10, 높을수록 중요)
+- `products`: 제품 목록
+  - `criteria_specs`: 각 기준별 실제 스펙 값 또는 요약 (string)
+    - 정량적 기준: 제품 정보에서 추출한 실제 값
+      - 예: "16GB DDR5", "1.4kg", "22시간", "250만원"
+    - 정성적 기준: 간단한 요약
+      - 예: "우수함", "보통", "긍정적 평가 많음", "슬림형 메탈 디자인"
+    - 정보가 없으면 빈 문자열
+  - `criteria_details`: 정성적 기준의 상세 정보 (dict[str, list[str]])
+    - 정성적 기준(예: "디자인", "사용 편의성")에 대한 리뷰 코멘트 리스트
+    - 제품 데이터의 pros, cons, 추천 이유 등에서 추출
+    - 정량적 기준이거나 상세 정보가 없으면 빈 리스트
+- `summary`: 전체 제품군에 대한 종합평 (5~8문장)
 
 ## INSTRUCTIONS:
 
-### INSTRUCTION 1: SCORING CRITERIA
-- 각 기준별로 **0-100점**을 부여합니다.
-- 점수는 해당 카테고리 내에서 **상대적 평가**로 매깁니다.
-- 예시:
-  - 배터리 수명: 22시간 → 90점, 20시간 → 85점, 15시간 → 70점
-  - 가격: 낮을수록 높은 점수 (가성비 관점)
-  - 무게: 가벼울수록 높은 점수 (노트북 기준)
+### INSTRUCTION 1: IDENTIFY UNAVAILABLE CRITERIA
+- 사용자가 제시한 기준(`user_criteria`) 중 제품 데이터에서 추출할 수 없는 기준을 식별합니다.
+- 추출 불가능한 기준은 `unavailable_criteria` 리스트에 포함합니다.
+- 예: 사용자가 "A/S 기간"을 요청했지만 제품 데이터에 관련 정보가 전혀 없는 경우
 
-### INSTRUCTION 1-1: EXTRACT SPECIFICATION VALUES
-- **점수와 함께**, 각 기준에 대한 **실제 스펙 값**도 추출합니다.
-- `criteria_specs` 딕셔너리에 다음 형식으로 저장:
-  - 키: 기준 이름 (criteria_scores와 동일)
-  - 값: 제품 정보에서 추출한 실제 값 (간결한 문자열)
-- **추출 규칙**:
-  - 제품 데이터(key_features, price, pros, cons 등)에서 해당 기준과 관련된 구체적인 값을 찾습니다
-  - 숫자와 단위를 포함하여 간결하게 표현합니다
+### INSTRUCTION 2: EXTRACT SPECIFICATION VALUES
+- 각 제품의 각 기준별로 **실제 스펙 값 또는 속성**을 `criteria_specs`에 추출합니다.
+- **정량적 기준** (숫자로 측정 가능):
+  - 제품 데이터(key_features, price 등)에서 구체적인 값을 찾아 간결하게 표현
   - 예시:
-    - "배터리 수명" → "22시간" 또는 "20시간"
-    - "무게" → "1.4kg" 또는 "1.19kg"
-    - "가격" → "2,500,000원" 또는 "180만원"
+    - "배터리 수명" → "22시간"
+    - "무게" → "1.4kg"
+    - "가격" → "2,500,000원"
     - "RAM 용량" → "16GB DDR5"
-    - "프로세서 성능" → "M3 칩" 또는 "인텔 i7"
-  - 정보를 찾을 수 없으면 빈 문자열("")로 설정
-  - 정성적 기준(예: "디자인")은 간단한 설명 (예: "슬림형 메탈 바디")
-- **중요**: 스펙 값은 사실에 기반해야 하며, 추측하거나 임의로 생성하지 마세요
+    - "프로세서" → "M3 칩"
+- **정성적 기준** (주관적 평가):
+  - 리뷰나 평가를 종합하여 간단한 요약 제공
+  - 예시:
+    - "디자인" → "슬림형 메탈 디자인", "우수함", "긍정적 평가"
+    - "사용 편의성" → "직관적", "학습 곡선 있음", "편리함"
+- 정보가 없으면 빈 문자열("")로 설정
+- **중요**: 추측하지 말고 제공된 데이터에만 기반하세요
 
-### INSTRUCTION 2: OBJECTIVITY
-- **모든 기준을 동등하게** 평가합니다.
-- 사용자 우선순위는 참고만 하고, 점수에 반영하지 마세요.
-- 제품 데이터에만 기반하여 객관적으로 평가합니다.
+### INSTRUCTION 3: EXTRACT DETAILED COMMENTS FOR QUALITATIVE CRITERIA
+- 정성적 기준에 대해서는 `criteria_details`에 상세 코멘트 리스트를 추가합니다.
+- 제품 데이터의 pros, cons, recommendation_reasons, not_recommended_reasons 등에서 관련 내용 추출
+- 예시:
+  - "디자인": ["슬림하고 세련된 외관", "프리미엄 메탈 소재 사용", "다양한 색상 옵션"]
+  - "사용 편의성": ["직관적인 인터페이스", "초보자도 쉽게 사용 가능", "복잡한 설정 불필요"]
+- 정량적 기준이거나 관련 코멘트가 없으면 빈 리스트([])로 설정
 
-### INSTRUCTION 3: STRENGTHS & WEAKNESSES
-- `strengths`: 점수가 높은 기준을 중심으로 구체적으로 작성
-- `weaknesses`: 점수가 낮은 기준을 중심으로 구체적으로 작성
-- 각각 2~5개 항목으로 구성
+### INSTRUCTION 4: DETERMINE CRITERIA IMPORTANCE
+- Agent가 도출한 기준(사용자 제시 기준 제외)에 대해 중요도를 판단합니다.
+- `criteria_importance` 딕셔너리에 기준명과 중요도(1-10) 저장
+- 중요도 판단 기준:
+  - 해당 카테고리에서 일반적으로 얼마나 중요한 기준인가?
+  - 제품 간 차이가 명확하게 나타나는가?
+  - 구매 결정에 실질적 영향을 미치는가?
+- 사용자가 제시한 기준은 포함하지 않습니다 (별도로 우선 표시됨)
 
-### INSTRUCTION 4: SUMMARY
-- 전체 제품군의 특징을 3~5문장으로 요약합니다.
-- 카테고리, 제품 수, 주요 비교 기준 언급
-- 주요 발견 사항 (예: "모든 제품이 배터리 성능은 우수하나, 가격 차이가 큽니다")
-
-### INSTRUCTION 5: RECOMMENDATION
-- 각 제품의 특징과 적합한 사용자 프로필을 설명합니다.
-- "이 제품은 ~한 사용자에게 적합합니다" 형식으로 작성
-- 5~8문장으로 작성합니다.
+### INSTRUCTION 5: WRITE COMPREHENSIVE SUMMARY
+- 전체 제품군에 대한 종합평을 5~8문장으로 작성합니다.
+- 포함 내용:
+  - 카테고리 특성 및 제품 수
+  - 주요 비교 기준
+  - 제품군 전체의 특징 (공통점, 차이점)
+  - 주요 발견 사항
+- 예: "노트북 3개 제품을 비교했습니다. 모든 제품이 20시간 이상의 우수한 배터리 성능을 보이나, 무게와 가격에서 큰 차이를 보입니다. ..."
 
 ## EXAMPLES:
 
@@ -331,19 +333,22 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
 ```json
 {
   "category": "노트북",
-  "user_priorities": {"배터리 수명": 1, "무게": 2, "가격": 3},
+  "user_criteria": ["배터리", "무게", "디자인"],
+  "criteria": ["배터리 수명", "무게", "디자인", "가격", "프로세서", "디스플레이"],
   "products": [
     {
       "product_name": "맥북 프로",
       "price": "2,500,000원",
-      "key_features": ["M3 칩", "배터리 22시간", "1.4kg"],
-      ...
+      "key_features": ["M3 칩", "배터리 22시간", "1.4kg", "슬림 메탈 디자인"],
+      "pros": ["성능 우수", "디스플레이 품질", "프리미엄 디자인"],
+      "cons": ["고가"]
     },
     {
       "product_name": "LG 그램",
       "price": "1,800,000원",
       "key_features": ["인텔 i7", "배터리 20시간", "1.19kg"],
-      ...
+      "pros": ["가벼움", "배터리 우수", "가성비"],
+      "cons": ["디자인 평범", "성능 다소 부족"]
     }
   ]
 }
@@ -354,56 +359,44 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
 {
   "category": "노트북",
   "total_products": 2,
-  "user_criteria": ["배터리 수명", "무게", "가격"],
-  "user_priorities": {"배터리 수명": 1, "무게": 2, "가격": 3},
+  "user_criteria": ["배터리", "무게", "디자인"],
+  "unavailable_criteria": [],
+  "criteria_importance": {
+    "가격": 9,
+    "프로세서": 8,
+    "디스플레이": 7
+  },
   "products": [
     {
       "product_name": "맥북 프로",
-      "criteria_scores": {
-        "배터리 수명": 92,
-        "무게": 75,
-        "가격": 45
-      },
       "criteria_specs": {
         "배터리 수명": "22시간",
         "무게": "1.4kg",
-        "가격": "2,500,000원"
+        "디자인": "프리미엄",
+        "가격": "2,500,000원",
+        "프로세서": "M3 칩",
+        "디스플레이": "Retina 디스플레이"
       },
-      "strengths": [
-        "배터리 수명이 22시간으로 매우 길어 장시간 사용에 유리",
-        "M3 칩으로 최고 수준의 성능 제공",
-        "디스플레이 품질이 매우 우수"
-      ],
-      "weaknesses": [
-        "가격이 250만원으로 고가",
-        "무게가 LG 그램보다 0.21kg 더 무거움"
-      ]
+      "criteria_details": {
+        "디자인": ["슬림 메탈 디자인", "프리미엄 디자인", "세련된 외관"]
+      }
     },
     {
       "product_name": "LG 그램",
-      "criteria_scores": {
-        "배터리 수명": 87,
-        "무게": 95,
-        "가격": 75
-      },
       "criteria_specs": {
         "배터리 수명": "20시간",
         "무게": "1.19kg",
-        "가격": "1,800,000원"
+        "디자인": "보통",
+        "가격": "1,800,000원",
+        "프로세서": "인텔 i7",
+        "디스플레이": ""
       },
-      "strengths": [
-        "무게 1.19kg로 매우 가벼워 휴대성이 뛰어남",
-        "배터리 수명 20시간으로 우수",
-        "가격이 180만원으로 합리적"
-      ],
-      "weaknesses": [
-        "배터리 수명이 맥북 프로보다 2시간 짧음",
-        "프로세서 성능이 M3 칩 대비 다소 부족"
-      ]
+      "criteria_details": {
+        "디자인": ["디자인 평범"]
+      }
     }
   ],
-  "summary": "노트북 2개 제품을 배터리 수명, 무게, 가격 기준으로 비교했습니다. 두 제품 모두 배터리 성능은 우수하나 (20시간 이상), 무게와 가격에서 차이를 보입니다. 맥북 프로는 성능과 배터리가 더 우수하지만 비싸고, LG 그램은 가볍고 저렴합니다.",
-  "recommendation": "맥북 프로는 최고 수준의 성능과 긴 배터리 수명이 필요한 전문 작업자에게 적합합니다. LG 그램은 휴대성과 가성비를 중시하는 사용자에게 적합합니다. 배터리와 무게를 우선시한다면 LG 그램이, 성능과 배터리를 최우선한다면 맥북 프로가 좋은 선택입니다."
+  "summary": "노트북 2개 제품을 배터리 수명, 무게, 디자인 등 6개 기준으로 비교했습니다. 두 제품 모두 배터리 성능은 우수하나(20시간 이상), 무게, 가격, 디자인에서 차이를 보입니다. 맥북 프로는 성능과 디자인이 우수하지만 비싸고 무겁습니다. LG 그램은 가볍고 가성비가 좋지만 디자인이 평범합니다. 제품 선택 시 예산과 우선순위를 고려하시기 바랍니다."
 }
 ```
 
@@ -412,33 +405,36 @@ GENERATE_REPORT_SYSTEM_PROMPT = """
 ### CONSTRAINT 1: LANGUAGE
 - 모든 텍스트는 **한국어**로 작성합니다.
 
-### CONSTRAINT 2: NO RANKING
-- **순위(rank)를 매기지 마세요**
-- **종합 점수(score)를 계산하지 마세요**
-- 각 기준별 점수만 0-100 범위로 제공합니다.
+### CONSTRAINT 2: NO SCORING OR RANKING
+- **점수를 매기지 마세요**
+- **순위를 매기지 마세요**
+- **강점/약점을 작성하지 마세요**
+- 오직 객관적인 스펙 값과 속성만 추출합니다.
 
 ### CONSTRAINT 3: EVIDENCE-BASED
-- 제공된 제품 데이터에만 기반하여 평가합니다.
+- 제공된 제품 데이터에만 기반하여 추출합니다.
 - 추측이나 외부 정보를 추가하지 않습니다.
+- 정보가 없으면 빈 문자열 또는 빈 리스트로 남깁니다.
 """
 
 
 def build_generate_report_user_prompt(
-    category: str, user_priorities: dict[str, int], products: List[ProductAnalysis]
+    category: str,
+    user_criteria: List[str],
+    criteria: List[str],
+    products: List[ProductAnalysis]
 ) -> str:
     """보고서 생성 사용자 프롬프트
 
     Args:
         category: 제품 카테고리
-        user_priorities: 사용자 우선순위
+        user_criteria: 사용자가 제시한 기준
+        criteria: 모든 비교 기준
         products: 제품 목록
 
     Returns:
         사용자 프롬프트 문자열
     """
-    # 우선순위 정보
-    priorities_str = ", ".join([f"{k} ({v}위)" for k, v in sorted(user_priorities.items(), key=lambda x: x[1])])
-
     # 제품 정보 구조화
     products_info = []
     for idx, product in enumerate(products, 1):
@@ -455,28 +451,35 @@ Product {idx}: {product.get('product_name', 'Unknown')}
 """.strip()
         products_info.append(product_info)
 
-    return f"""Generate a comprehensive comparison report based on user priorities.
+    return f"""Extract specification values and attributes for all criteria.
 
 **Category:** {category}
 
-**User's Priority Rankings:**
-{priorities_str}
+**User's Requested Criteria (keywords):**
+{', '.join(user_criteria) if user_criteria else '[None provided]'}
+
+**All Comparison Criteria:**
+{', '.join(criteria)}
 
 **Products to Compare:**
 {chr(10).join(products_info)}
 
-Based on the user's priorities, rank the products and generate a detailed comparison report.
-The product that performs best in the highest-priority criteria should be ranked first."""
+Extract specification values, attributes, and detailed comments for each product based on all criteria.
+Identify any user criteria that cannot be extracted from the product data."""
 
 
 def build_generate_report_messages(
-    category: str, user_priorities: dict[str, int], products: List[ProductAnalysis]
+    category: str,
+    user_criteria: List[str],
+    criteria: List[str],
+    products: List[ProductAnalysis]
 ) -> List[dict]:
     """보고서 생성 메시지 생성
 
     Args:
         category: 제품 카테고리
-        user_priorities: 사용자 우선순위
+        user_criteria: 사용자가 제시한 기준
+        criteria: 모든 비교 기준
         products: 제품 목록
 
     Returns:
@@ -486,6 +489,6 @@ def build_generate_report_messages(
         {"role": "system", "content": GENERATE_REPORT_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": build_generate_report_user_prompt(category, user_priorities, products),
+            "content": build_generate_report_user_prompt(category, user_criteria, criteria, products),
         },
     ]
