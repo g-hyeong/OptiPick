@@ -1,23 +1,20 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui";
 import { Chip } from "@/components/ui";
-import type { ComparisonTask } from "@/types/storage";
+import type { ComparisonTask, StoredProduct } from "@/types/storage";
 import type { ComparisonReportData, ProductComparison } from "@/types/content";
-
-interface RankedProduct extends ProductComparison {
-  score: number;
-  rank: number;
-}
 
 export function CompareReportPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<ComparisonReportData | null>(null);
-  const [rankedProducts, setRankedProducts] = useState<RankedProduct[]>([]);
-  const [userPriorities, setUserPriorities] = useState<string[]>([]);
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<RankedProduct | null>(null);
-  const [isEditingPriorities, setIsEditingPriorities] = useState(false);
+  const [products, setProducts] = useState<StoredProduct[]>([]);
+
+  // 필터링 및 순서 변경 상태
+  const [visibleProducts, setVisibleProducts] = useState<string[]>([]);
+  const [visibleCriteria, setVisibleCriteria] = useState<string[]>([]);
+  const [productOrder, setProductOrder] = useState<string[]>([]);
+  const [criteriaOrder, setCriteriaOrder] = useState<string[]>([]);
 
   useEffect(() => {
     loadReport();
@@ -30,7 +27,7 @@ export function CompareReportPage() {
       const historyId = urlParams.get("historyId");
 
       let reportData: ComparisonReportData;
-      let priorities: string[] = [];
+      let loadedProducts: StoredProduct[] = [];
 
       if (historyId) {
         // 히스토리에서 로드
@@ -52,11 +49,18 @@ export function CompareReportPage() {
         console.log("[CompareReportPage] History item loaded:", {
           category: historyItem.category,
           productCount: historyItem.productCount,
-          hasPriorities: !!historyItem.userPriorities,
         });
 
         reportData = historyItem.reportData;
-        priorities = historyItem.userPriorities || [];
+        loadedProducts = historyItem.products || [];
+
+        // 기존 히스토리 데이터 호환성: 누락된 필드 기본값 추가
+        if (!reportData.unavailable_criteria) {
+          reportData.unavailable_criteria = [];
+        }
+        if (!reportData.criteria_importance) {
+          reportData.criteria_importance = {};
+        }
       } else {
         // 현재 작업에서 로드
         const result = await chrome.storage.local.get("currentComparisonTask");
@@ -68,30 +72,40 @@ export function CompareReportPage() {
 
         reportData = task.report;
 
-        // 우선순위 배열 변환
-        if (task.userPriorities && Array.isArray(task.userPriorities)) {
-          priorities = task.userPriorities;
-        } else if (reportData.user_priorities && typeof reportData.user_priorities === "object") {
-          priorities = Object.entries(reportData.user_priorities)
-            .sort(([, a], [, b]) => (a as number) - (b as number))
-            .map(([criterion]) => criterion);
+        // 기존 데이터 호환성: 누락된 필드 기본값 추가
+        if (!reportData.unavailable_criteria) {
+          reportData.unavailable_criteria = [];
         }
+        if (!reportData.criteria_importance) {
+          reportData.criteria_importance = {};
+        }
+
+        // 선택된 제품들 가져오기
+        const allProductsResult = await chrome.storage.local.get("products");
+        const allProducts = allProductsResult.products || [];
+        loadedProducts = allProducts.filter((p: StoredProduct) =>
+          task.selectedProductIds.includes(p.id)
+        );
       }
 
-      // 우선순위가 없으면 reportData에서 추출
-      if (priorities.length === 0 && reportData.user_priorities) {
-        priorities = Object.entries(reportData.user_priorities)
-          .sort(([, a], [, b]) => (a as number) - (b as number))
-          .map(([criterion]) => criterion);
-      }
+      // 초기 필터링 및 순서 설정
+      const productNames = reportData.products.map(p => p.product_name);
+      const allCriteria = getAllCriteria(reportData);
 
-      // 순위 계산
-      const ranked = rankProducts(reportData.products, priorities);
+      // 사용자 기준 먼저, 그 다음 Agent 기준 (중요도 순)
+      const orderedCriteria = [
+        ...reportData.user_criteria.filter(c => !reportData.unavailable_criteria.includes(c)),
+        ...Object.entries(reportData.criteria_importance)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .map(([c]) => c)
+      ];
 
       setReport(reportData);
-      setUserPriorities(priorities);
-      setRankedProducts(ranked);
-      setSelectedProducts(ranked.slice(0, 2).map((p) => p.product_name));
+      setProducts(loadedProducts);
+      setVisibleProducts(productNames);
+      setVisibleCriteria(allCriteria);
+      setProductOrder(productNames);
+      setCriteriaOrder(orderedCriteria);
       setLoading(false);
     } catch (err) {
       console.error("Failed to load report:", err);
@@ -100,96 +114,76 @@ export function CompareReportPage() {
     }
   };
 
-  const getPriorityWeight = (priority: number): number => {
-    return Math.max(6 - priority, 0);
+  const getAllCriteria = (report: ComparisonReportData): string[] => {
+    const criteriaSet = new Set<string>();
+
+    // 사용자 기준 (unavailable 제외)
+    report.user_criteria
+      .filter(c => !report.unavailable_criteria.includes(c))
+      .forEach(c => criteriaSet.add(c));
+
+    // Agent 도출 기준
+    Object.keys(report.criteria_importance).forEach(c => criteriaSet.add(c));
+
+    return Array.from(criteriaSet);
   };
 
-  const calculateFinalScore = (
-    product: ProductComparison,
-    priorities: string[]
-  ): number => {
-    if (priorities.length === 0) {
-      const scores = Object.values(product.criteria_scores);
-      return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  const toggleProduct = (productName: string) => {
+    setVisibleProducts(prev =>
+      prev.includes(productName)
+        ? prev.filter(p => p !== productName)
+        : [...prev, productName]
+    );
+  };
+
+  const toggleCriterion = (criterion: string) => {
+    setVisibleCriteria(prev =>
+      prev.includes(criterion)
+        ? prev.filter(c => c !== criterion)
+        : [...prev, criterion]
+    );
+  };
+
+  const moveProduct = (productName: string, direction: 'left' | 'right') => {
+    const index = productOrder.indexOf(productName);
+    if (index === -1) return;
+
+    const newOrder = [...productOrder];
+    if (direction === 'left' && index > 0) {
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    } else if (direction === 'right' && index < newOrder.length - 1) {
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
     }
-
-    let weightedSum = 0;
-    let totalWeight = 0;
-
-    priorities.forEach((criterion, index) => {
-      const priority = index + 1;
-      const weight = getPriorityWeight(priority);
-      const score = product.criteria_scores[criterion] || 0;
-
-      weightedSum += score * weight;
-      totalWeight += weight;
-    });
-
-    return totalWeight > 0 ? weightedSum / totalWeight : 0;
+    setProductOrder(newOrder);
   };
 
-  const rankProducts = (
-    products: ProductComparison[],
-    priorities: string[]
-  ): RankedProduct[] => {
-    const productsWithScore = products.map((product) => ({
-      ...product,
-      score: calculateFinalScore(product, priorities),
-      rank: 0,
-    }));
+  const moveCriterion = (criterion: string, direction: 'up' | 'down') => {
+    const index = criteriaOrder.indexOf(criterion);
+    if (index === -1) return;
 
-    productsWithScore.sort((a, b) => b.score - a.score);
-    productsWithScore.forEach((product, index) => {
-      product.rank = index + 1;
-    });
-
-    return productsWithScore;
-  };
-
-  const toggleProductSelection = (productName: string) => {
-    if (selectedProducts.includes(productName)) {
-      if (selectedProducts.length > 2) {
-        setSelectedProducts(selectedProducts.filter((p) => p !== productName));
-      }
-    } else {
-      if (selectedProducts.length < 3) {
-        setSelectedProducts([...selectedProducts, productName]);
-      }
+    const newOrder = [...criteriaOrder];
+    if (direction === 'up' && index > 0) {
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+    } else if (direction === 'down' && index < newOrder.length - 1) {
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
     }
+    setCriteriaOrder(newOrder);
   };
 
-  // 우선순위 위로 이동
-  const movePriorityUp = (index: number) => {
-    if (index === 0) return;
-    const newPriorities = [...userPriorities];
-    [newPriorities[index - 1], newPriorities[index]] = [
-      newPriorities[index],
-      newPriorities[index - 1],
-    ];
-    setUserPriorities(newPriorities);
-
-    // 순위 재계산
-    if (report) {
-      const reranked = rankProducts(report.products, newPriorities);
-      setRankedProducts(reranked);
-    }
+  const getProductData = (productName: string): ProductComparison | undefined => {
+    return report?.products.find(p => p.product_name === productName);
   };
 
-  // 우선순위 아래로 이동
-  const movePriorityDown = (index: number) => {
-    if (index === userPriorities.length - 1) return;
-    const newPriorities = [...userPriorities];
-    [newPriorities[index], newPriorities[index + 1]] = [
-      newPriorities[index + 1],
-      newPriorities[index],
-    ];
-    setUserPriorities(newPriorities);
+  const getProductInfo = (productName: string): StoredProduct | undefined => {
+    return products.find(p => p.fullAnalysis.product_name === productName);
+  };
 
-    // 순위 재계산
-    if (report) {
-      const reranked = rankProducts(report.products, newPriorities);
-      setRankedProducts(reranked);
-    }
+  const isUserCriterion = (criterion: string): boolean => {
+    return report?.user_criteria.includes(criterion) || false;
+  };
+
+  const getCriteriaImportance = (criterion: string): number | undefined => {
+    return report?.criteria_importance[criterion];
   };
 
   if (loading) {
@@ -214,12 +208,8 @@ export function CompareReportPage() {
     );
   }
 
-  const selectedForComparison = rankedProducts.filter((p) =>
-    selectedProducts.includes(p.product_name)
-  );
-  const criteria = selectedForComparison.length > 0
-    ? Object.keys(selectedForComparison[0].criteria_scores)
-    : [];
+  const orderedVisibleProducts = productOrder.filter(p => visibleProducts.includes(p));
+  const orderedVisibleCriteria = criteriaOrder.filter(c => visibleCriteria.includes(c));
 
   return (
     <div className="min-h-screen bg-warm-50">
@@ -227,330 +217,313 @@ export function CompareReportPage() {
         {/* 헤더 */}
         <header className="mb-8">
           <h1 className="text-4xl font-bold text-primary-800 mb-2">
-            OptiPick 비교 분석 결과
+            SmartCompare 비교 분석 결과
           </h1>
           <p className="text-primary-600">
             {report.category} · {report.total_products}개 제품 비교
           </p>
 
-          {userPriorities.length > 0 && (
+          {report.user_criteria.length > 0 && (
             <div className="mt-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-primary-700">선택한 우선순위:</span>
-                <button
-                  onClick={() => setIsEditingPriorities(!isEditingPriorities)}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium px-3 py-1 rounded border border-primary-300 hover:bg-primary-50 transition-colors"
-                >
-                  {isEditingPriorities ? "편집 완료" : "우선순위 편집"}
-                </button>
+              <span className="text-sm font-medium text-primary-700">사용자 입력 기준:</span>
+              <div className="flex items-center gap-2 flex-wrap mt-2">
+                {report.user_criteria.map((criterion) => (
+                  <Chip key={criterion} variant="selected" size="md">
+                    {criterion}
+                  </Chip>
+                ))}
               </div>
-
-              {!isEditingPriorities ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  {userPriorities.map((priority, index) => (
-                    <Chip key={priority} variant="selected" size="md">
-                      <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-                        {index + 1}
-                      </span>
-                      {priority}
-                    </Chip>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {userPriorities.map((priority, index) => (
-                    <div
-                      key={priority}
-                      className="flex items-center gap-3 bg-white p-3 rounded-lg border border-warm-200"
-                    >
-                      <span className="flex items-center justify-center w-8 h-8 bg-primary-500 text-white text-sm font-bold rounded-full flex-shrink-0">
-                        {index + 1}
-                      </span>
-                      <span className="flex-1 text-sm font-medium text-primary-800">
-                        {priority}
-                      </span>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button
-                          onClick={() => movePriorityUp(index)}
-                          disabled={index === 0}
-                          className={`p-1.5 rounded ${
-                            index === 0
-                              ? "text-warm-300 cursor-not-allowed"
-                              : "text-primary-600 hover:bg-primary-100"
-                          }`}
-                          title="위로 이동"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => movePriorityDown(index)}
-                          disabled={index === userPriorities.length - 1}
-                          className={`p-1.5 rounded ${
-                            index === userPriorities.length - 1
-                              ? "text-warm-300 cursor-not-allowed"
-                              : "text-primary-600 hover:bg-primary-100"
-                          }`}
-                          title="아래로 이동"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs text-primary-600 mt-2">
-                    우선순위를 변경하면 제품 순위가 자동으로 재계산됩니다
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </header>
 
-        {/* 요약 */}
-        <Card className="mb-8 bg-primary-50 border-primary-200">
-          <h2 className="text-xl font-semibold text-primary-800 mb-3">요약</h2>
-          <p className="text-primary-700 leading-relaxed">{report.summary}</p>
-        </Card>
-
-        {/* 순위별 제품 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-primary-800 mb-6">순위별 제품</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rankedProducts.map((product) => (
-              <Card
-                key={product.product_name}
-                className={`relative ${
-                  product.rank === 1
-                    ? "ring-2 ring-yellow-400 bg-yellow-50"
-                    : product.rank === 2
-                    ? "ring-2 ring-gray-300"
-                    : product.rank === 3
-                    ? "ring-2 ring-orange-300"
-                    : ""
-                }`}
-                hover
-                onClick={() => setSelectedProduct(product)}
-              >
-                <div
-                  className={`absolute -top-3 -right-3 w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg ${
-                    product.rank === 1
-                      ? "bg-yellow-500"
-                      : product.rank === 2
-                      ? "bg-gray-400"
-                      : product.rank === 3
-                      ? "bg-orange-400"
-                      : "bg-primary-500"
-                  }`}
-                >
-                  {product.rank}
-                </div>
-
-                <h3 className="font-bold text-lg text-primary-800 mb-2 pr-8">
-                  {product.product_name}
+        {/* 추출 불가능한 기준 안내 */}
+        {report.unavailable_criteria.length > 0 && (
+          <Card className="mb-6 bg-yellow-50 border-yellow-300">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-yellow-800 mb-1">
+                  추출 불가능한 기준
                 </h3>
-                <p className="text-3xl font-bold text-primary-600 mb-4">
-                  {product.score.toFixed(1)}점
+                <p className="text-sm text-yellow-700 mb-2">
+                  제품 데이터에서 다음 기준에 대한 정보를 찾을 수 없습니다:
                 </p>
-
-                {/* 상위 3개 기준 점수 */}
-                <div className="space-y-2">
-                  {userPriorities.slice(0, 3).map((criterion) => (
-                    <div key={criterion} className="flex justify-between text-sm">
-                      <span className="text-primary-700">{criterion}</span>
-                      <span className="font-semibold text-primary-800">
-                        {product.criteria_scores[criterion]?.toFixed(0) || "-"}점
-                      </span>
-                    </div>
+                <div className="flex flex-wrap gap-2">
+                  {report.unavailable_criteria.map((criterion) => (
+                    <Chip key={criterion} variant="primary" size="sm">
+                      {criterion}
+                    </Chip>
                   ))}
                 </div>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        {/* 기준별 비교 */}
-        <section className="mb-12">
-          <h2 className="text-2xl font-bold text-primary-800 mb-6">기준별 비교</h2>
-
-          {/* 제품 선택 */}
-          <Card className="mb-6 bg-warm-100">
-            <h3 className="text-sm font-semibold text-primary-800 mb-3">
-              비교할 제품 선택 (2~3개)
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {rankedProducts.map((product) => (
-                <Chip
-                  key={product.product_name}
-                  variant={selectedProducts.includes(product.product_name) ? "selected" : "primary"}
-                  clickable
-                  onClick={() => toggleProductSelection(product.product_name)}
-                >
-                  {product.product_name}
-                </Chip>
-              ))}
+              </div>
             </div>
           </Card>
+        )}
 
-          {/* 비교 테이블 */}
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-warm-200">
-                    <th className="text-left p-3 text-primary-800 font-semibold">기준</th>
-                    {selectedForComparison.map((product) => (
-                      <th key={product.product_name} className="text-left p-3 text-primary-800 font-semibold">
-                        {product.product_name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {criteria.map((criterion, idx) => {
-                    const isPriority = userPriorities.includes(criterion);
-                    return (
-                      <tr
-                        key={criterion}
-                        className={`border-b border-warm-100 ${
-                          idx % 2 === 0 ? "bg-warm-50" : ""
-                        }`}
-                      >
-                        <td className="p-3 font-medium text-primary-700">
-                          {criterion} {isPriority && "⭐"}
-                        </td>
-                        {selectedForComparison.map((product) => {
-                          const score = product.criteria_scores[criterion];
-                          const spec = product.criteria_specs?.[criterion];
+        {/* 제품 필터링 및 순서 변경 */}
+        <Card className="mb-6">
+          <h3 className="text-sm font-semibold text-primary-800 mb-3">
+            제품 필터링 및 순서 변경
+          </h3>
+          <div className="space-y-2">
+            {productOrder.map((productName) => {
+              const isVisible = visibleProducts.includes(productName);
+              const productInfo = getProductInfo(productName);
+              const index = productOrder.indexOf(productName);
 
-                          return (
-                            <td key={product.product_name} className="p-3">
-                              <div className="flex flex-col gap-1">
-                                <span className="text-primary-800 font-medium">
-                                  {score !== undefined ? `${score.toFixed(0)}점` : "-"}
-                                </span>
-                                {spec && spec.trim() !== "" && (
-                                  <span className="text-xs text-primary-600">
-                                    {spec}
-                                  </span>
-                                )}
-                                {(!spec || spec.trim() === "") && (
-                                  <span className="text-xs text-primary-400">-</span>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </section>
-
-        {/* 최종 추천 */}
-        <Card className="bg-gradient-to-r from-accent-500 to-primary-500 text-white">
-          <h2 className="text-2xl font-bold mb-4">최종 추천</h2>
-          <p className="text-white/90 text-lg leading-relaxed">{report.recommendation}</p>
-        </Card>
-      </div>
-
-      {/* 제품 상세 모달 */}
-      {selectedProduct && (
-        <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50"
-          onClick={() => setSelectedProduct(null)}
-        >
-          <Card
-            className="max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <span
-                  className={`inline-block px-3 py-1 rounded-full text-sm font-bold mb-2 ${
-                    selectedProduct.rank === 1
-                      ? "bg-yellow-500 text-white"
-                      : selectedProduct.rank === 2
-                      ? "bg-gray-400 text-white"
-                      : selectedProduct.rank === 3
-                      ? "bg-orange-400 text-white"
-                      : "bg-primary-500 text-white"
+              return (
+                <div
+                  key={productName}
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    isVisible
+                      ? "bg-white border-primary-200"
+                      : "bg-warm-100 border-warm-200 opacity-50"
                   }`}
                 >
-                  {selectedProduct.rank}위
-                </span>
-                <h3 className="text-2xl font-bold text-primary-800">
-                  {selectedProduct.product_name}
-                </h3>
-                <p className="text-4xl font-bold text-primary-600 mt-2">
-                  {selectedProduct.score.toFixed(1)}점
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="text-primary-600 hover:text-primary-800 text-2xl"
-              >
-                ×
-              </button>
-            </div>
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    onChange={() => toggleProduct(productName)}
+                    className="w-4 h-4 text-primary-600"
+                  />
+                  {productInfo?.thumbnailUrl && (
+                    <img
+                      src={productInfo.thumbnailUrl}
+                      alt={productName}
+                      className="w-12 h-12 object-cover rounded"
+                    />
+                  )}
+                  <span className="flex-1 text-sm font-medium text-primary-800">
+                    {productName}
+                  </span>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => moveProduct(productName, 'left')}
+                      disabled={index === 0}
+                      className={`p-1.5 rounded ${
+                        index === 0
+                          ? "text-warm-300 cursor-not-allowed"
+                          : "text-primary-600 hover:bg-primary-100"
+                      }`}
+                      title="왼쪽으로 이동"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => moveProduct(productName, 'right')}
+                      disabled={index === productOrder.length - 1}
+                      className={`p-1.5 rounded ${
+                        index === productOrder.length - 1
+                          ? "text-warm-300 cursor-not-allowed"
+                          : "text-primary-600 hover:bg-primary-100"
+                      }`}
+                      title="오른쪽으로 이동"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
 
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-semibold text-primary-800 mb-2">기준별 점수</h4>
-                <div className="space-y-2">
-                  {Object.entries(selectedProduct.criteria_scores).map(([criterion, score]) => {
-                    const isPriority = userPriorities.includes(criterion);
+        {/* 기준 필터링 및 순서 변경 */}
+        <Card className="mb-6">
+          <h3 className="text-sm font-semibold text-primary-800 mb-3">
+            기준 필터링 및 순서 변경
+          </h3>
+          <div className="space-y-2">
+            {criteriaOrder.map((criterion) => {
+              const isVisible = visibleCriteria.includes(criterion);
+              const isUser = isUserCriterion(criterion);
+              const importance = getCriteriaImportance(criterion);
+              const index = criteriaOrder.indexOf(criterion);
+
+              return (
+                <div
+                  key={criterion}
+                  className={`flex items-center gap-3 p-3 rounded-lg border ${
+                    isVisible
+                      ? "bg-white border-primary-200"
+                      : "bg-warm-100 border-warm-200 opacity-50"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isVisible}
+                    onChange={() => toggleCriterion(criterion)}
+                    className="w-4 h-4 text-primary-600"
+                  />
+                  <span className="flex-1 text-sm font-medium text-primary-800">
+                    {criterion}
+                    {isUser && (
+                      <span className="ml-2 text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded">
+                        사용자 기준
+                      </span>
+                    )}
+                    {importance && (
+                      <span className="ml-2 text-xs bg-accent-100 text-accent-700 px-2 py-0.5 rounded">
+                        중요도 {importance}
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => moveCriterion(criterion, 'up')}
+                      disabled={index === 0}
+                      className={`p-1.5 rounded ${
+                        index === 0
+                          ? "text-warm-300 cursor-not-allowed"
+                          : "text-primary-600 hover:bg-primary-100"
+                      }`}
+                      title="위로 이동"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => moveCriterion(criterion, 'down')}
+                      disabled={index === criteriaOrder.length - 1}
+                      className={`p-1.5 rounded ${
+                        index === criteriaOrder.length - 1
+                          ? "text-warm-300 cursor-not-allowed"
+                          : "text-primary-600 hover:bg-primary-100"
+                      }`}
+                      title="아래로 이동"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* 비교 테이블 (전치: 행=기준, 열=제품) */}
+        <Card className="mb-8">
+          <h2 className="text-2xl font-bold text-primary-800 mb-4">제품 비교 테이블</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              {/* 제품명 + 썸네일 행 */}
+              <thead>
+                <tr className="border-b-2 border-primary-300">
+                  <th className="text-left p-3 bg-primary-50 font-semibold text-primary-800 sticky left-0 z-10">
+                    기준 / 제품
+                  </th>
+                  {orderedVisibleProducts.map((productName) => {
+                    const productInfo = getProductInfo(productName);
                     return (
-                      <div key={criterion} className="flex justify-between">
-                        <span className="text-primary-700">
-                          {criterion} {isPriority && "⭐"}
-                        </span>
-                        <span className="font-semibold text-primary-800">
-                          {score.toFixed(0)}점
-                        </span>
-                      </div>
+                      <th key={productName} className="text-center p-3 bg-primary-50">
+                        <div className="flex flex-col items-center gap-2">
+                          {productInfo?.thumbnailUrl && (
+                            <a
+                              href={productInfo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block"
+                            >
+                              <img
+                                src={productInfo.thumbnailUrl}
+                                alt={productName}
+                                className="w-20 h-20 object-cover rounded hover:ring-2 hover:ring-primary-500 transition-all"
+                              />
+                            </a>
+                          )}
+                          <a
+                            href={productInfo?.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-semibold text-primary-800 hover:text-primary-600 transition-colors text-sm max-w-[150px]"
+                          >
+                            {productName}
+                          </a>
+                        </div>
+                      </th>
                     );
                   })}
-                </div>
-              </div>
+                </tr>
+              </thead>
+              <tbody>
+                {orderedVisibleCriteria.map((criterion, idx) => {
+                  const isUser = isUserCriterion(criterion);
+                  const importance = getCriteriaImportance(criterion);
 
-              {selectedProduct.strengths.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-success mb-2">강점</h4>
-                  <ul className="space-y-1">
-                    {selectedProduct.strengths.map((strength, idx) => (
-                      <li key={idx} className="text-sm text-primary-700 flex items-start gap-2">
-                        <span className="text-success">✓</span>
-                        {strength}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                  return (
+                    <tr
+                      key={criterion}
+                      className={`border-b border-warm-100 ${
+                        idx % 2 === 0 ? "bg-warm-50" : "bg-white"
+                      }`}
+                    >
+                      <td className="p-3 font-medium text-primary-800 sticky left-0 z-10 bg-inherit">
+                        <div className="flex flex-col gap-1">
+                          <span>{criterion}</span>
+                          <div className="flex gap-1 flex-wrap">
+                            {isUser && (
+                              <span className="text-xs bg-primary-100 text-primary-700 px-2 py-0.5 rounded">
+                                사용자
+                              </span>
+                            )}
+                            {importance && (
+                              <span className="text-xs bg-accent-100 text-accent-700 px-2 py-0.5 rounded">
+                                중요도 {importance}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      {orderedVisibleProducts.map((productName) => {
+                        const productData = getProductData(productName);
+                        const spec = productData?.criteria_specs?.[criterion];
+                        const details = productData?.criteria_details?.[criterion];
 
-              {selectedProduct.weaknesses.length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-error mb-2">약점</h4>
-                  <ul className="space-y-1">
-                    {selectedProduct.weaknesses.map((weakness, idx) => (
-                      <li key={idx} className="text-sm text-primary-700 flex items-start gap-2">
-                        <span className="text-error">✗</span>
-                        {weakness}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      )}
+                        return (
+                          <td key={productName} className="p-3 align-top">
+                            {spec && spec.trim() !== "" ? (
+                              <div className="flex flex-col gap-2">
+                                <span className="text-primary-800 font-medium">
+                                  {spec}
+                                </span>
+                                {details && details.length > 0 && (
+                                  <ul className="text-xs text-primary-600 space-y-1 pl-3">
+                                    {details.map((detail, detailIdx) => (
+                                      <li key={detailIdx} className="list-disc">
+                                        {detail}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-warm-400">-</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        {/* 종합평 */}
+        <Card className="bg-primary-50 border-primary-200">
+          <h2 className="text-xl font-semibold text-primary-800 mb-3">종합평</h2>
+          <p className="text-primary-700 leading-relaxed">{report.summary}</p>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -99,18 +99,8 @@ export interface ProductAnalysisResponse {
  */
 export interface ProductComparison {
   product_name: string;
-  criteria_scores: { [criterion: string]: number }; // 0-100 점수
-  criteria_specs: { [criterion: string]: string }; // 실제 스펙 값 (예: "16GB DDR5", "1.4kg")
-  strengths: string[];
-  weaknesses: string[];
-}
-
-/**
- * 순위가 계산된 제품 정보 (Extension에서 계산)
- */
-export interface RankedProduct extends ProductComparison {
-  rank: number;
-  score: number; // 우선순위 기반 최종 점수
+  criteria_specs: { [criterion: string]: string }; // 각 기준별 실제 스펙 값 또는 요약
+  criteria_details: { [criterion: string]: string[] }; // 정성적 기준의 상세 정보 (리뷰 코멘트 등)
 }
 
 /**
@@ -120,10 +110,10 @@ export interface ComparisonReportData {
   category: string;
   total_products: number;
   user_criteria: string[];
-  user_priorities: { [criterion: string]: number };
-  products: ProductComparison[]; // rank 없음, Extension에서 계산
+  unavailable_criteria: string[]; // 제품 데이터에서 추출 불가능한 사용자 기준
+  criteria_importance: { [criterion: string]: number }; // Agent가 도출한 기준의 중요도 (1-10)
+  products: ProductComparison[];
   summary: string;
-  recommendation: string;
 }
 
 /**

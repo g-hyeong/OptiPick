@@ -336,100 +336,38 @@ async function executeComparisonStart(
 }
 
 /**
- * 비교 작업 계속 - Step 1 (사용자 기준 입력)
+ * 비교 작업 계속 - 사용자 기준 입력 및 분석 완료
  */
-async function continueComparisonStep1(userCriteria: string[]): Promise<void> {
+async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
   try {
     const currentTask = await getComparisonTaskState();
     if (!currentTask || !currentTask.threadId) {
       throw new Error('진행 중인 비교 작업이 없습니다.');
     }
 
-    // 1. 사용자 기준 저장
+    // 1. 사용자 기준 저장 및 분석 중 상태로 전환
     await updateComparisonTaskState({
       userCriteria,
-      status: 'step1',
-      message: 'Agent가 비교 기준을 분석하고 있습니다...',
-    });
-
-    // 2. Agent API 호출 (사용자 기준 전송)
-    const response = await continueComparison(currentTask.threadId, {
-      user_input: userCriteria,
-    });
-
-    // 3. 추출된 기준 저장 및 Step 2 대기 상태로 전환
-    if (response.status === 'waiting_for_priorities' && response.criteria) {
-      await updateComparisonTaskState({
-        extractedCriteria: response.criteria,
-        status: 'step2',
-        message: '비교 기준의 우선순위를 설정해주세요.',
-      });
-    } else {
-      throw new Error('예상하지 못한 응답 형식입니다.');
-    }
-  } catch (error) {
-    console.error('Step 1 진행 실패:', error);
-
-    await updateComparisonTaskState({
-      status: 'failed',
-      message: '기준 분석 실패',
-      error: error instanceof Error ? error.message : '알 수 없는 오류',
-      completedAt: Date.now(),
-    });
-
-    await chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icon-128.png',
-      title: '비교 분석 실패',
-      message: error instanceof Error ? error.message : '알 수 없는 오류',
-    });
-
-    setTimeout(async () => {
-      await saveComparisonTaskState(null);
-    }, 5000);
-  }
-}
-
-/**
- * 비교 작업 계속 - Step 2 (우선순위 입력)
- */
-async function continueComparisonStep2(
-  priorities: { [criterion: string]: number }
-): Promise<void> {
-  try {
-    const currentTask = await getComparisonTaskState();
-    if (!currentTask || !currentTask.threadId) {
-      throw new Error('진행 중인 비교 작업이 없습니다.');
-    }
-
-    // 1. 최종 분석 중 상태로 전환
-    await updateComparisonTaskState({
       status: 'analyzing',
       message: '제품들을 비교 분석하고 있습니다...',
     });
 
-    // 2. Agent API 호출 (우선순위 전송)
+    // 2. Agent API 호출 (사용자 기준 전송 및 분석 완료)
     const response = await continueComparison(currentTask.threadId, {
-      user_input: priorities,
+      user_input: userCriteria,
     });
 
     // 3. 최종 리포트 저장
     if (response.status === 'completed' && response.report) {
-      // 3-1. 우선순위 배열 생성 (순서대로)
-      const prioritiesArray = Object.entries(priorities)
-        .sort(([, a], [, b]) => a - b)
-        .map(([criterion]) => criterion);
-
-      // 3-2. ComparisonTask 업데이트
+      // 3-1. ComparisonTask 업데이트
       await updateComparisonTaskState({
         report: response.report,
-        userPriorities: prioritiesArray,
         status: 'completed',
         message: '비교 분석이 완료되었습니다!',
         completedAt: Date.now(),
       });
 
-      // 3-3. analysisHistory에 저장
+      // 3-2. analysisHistory에 저장
       const allProducts = await getProducts();
       const selectedProducts = allProducts.filter((p) =>
         currentTask.selectedProductIds.includes(p.id)
@@ -443,7 +381,6 @@ async function continueComparisonStep2(
         productCount: response.report.total_products,
         products: selectedProducts,
         criteria: response.report.user_criteria,
-        userPriorities: prioritiesArray,
         reportData: response.report,
       };
 
@@ -476,11 +413,11 @@ async function continueComparisonStep2(
       throw new Error('예상하지 못한 응답 형식입니다.');
     }
   } catch (error) {
-    console.error('Step 2 진행 실패:', error);
+    console.error('비교 분석 실패:', error);
 
     await updateComparisonTaskState({
       status: 'failed',
-      message: '최종 분석 실패',
+      message: '비교 분석 실패',
       error: error instanceof Error ? error.message : '알 수 없는 오류',
       completedAt: Date.now(),
     });
@@ -696,27 +633,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'CONTINUE_COMPARISON_STEP1') {
+  if (message.type === 'SUBMIT_COMPARISON_CRITERIA') {
     const { userCriteria } = message;
 
-    continueComparisonStep1(userCriteria)
-      .then(() => {
-        sendResponse({ success: true });
-      })
-      .catch((error) => {
-        sendResponse({
-          success: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류',
-        });
-      });
-
-    return true;
-  }
-
-  if (message.type === 'CONTINUE_COMPARISON_STEP2') {
-    const { priorities } = message;
-
-    continueComparisonStep2(priorities)
+    submitComparisonCriteria(userCriteria)
       .then(() => {
         sendResponse({ success: true });
       })

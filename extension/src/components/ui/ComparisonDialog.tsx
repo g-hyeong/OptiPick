@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Modal, ModalContent, ModalHeader, ModalTitle } from "./Modal";
 import { Button } from "./Button";
 import { Input } from "./Input";
-import { Card } from "./Card";
 import { Chip } from "./Chip";
 import { useComparisonTask } from "@/hooks/useComparisonTask";
 import { useProducts } from "@/hooks/useProducts";
@@ -27,20 +26,16 @@ export function ComparisonDialog({
   const {
     task,
     startComparison,
-    continueStep1,
-    continueStep2,
+    submitCriteria,
   } = useComparisonTask(open); // 모달이 열려있을 때만 폴링
 
   const { products } = useProducts();
   const { addHistoryItem } = useAnalysisHistory();
   const { templates, addTemplate } = useTemplates();
 
-  // Step 1: 사용자 기준 입력
+  // 사용자 기준 입력
   const [criteriaInput, setCriteriaInput] = useState("");
   const [criteriaList, setCriteriaList] = useState<string[]>([]);
-
-  // Step 2: 우선순위 선택
-  const [selectedPriorities, setSelectedPriorities] = useState<string[]>([]);
 
   // 템플릿 관련
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
@@ -48,7 +43,6 @@ export function ComparisonDialog({
 
   // 로딩 상태
   const [isSubmittingCriteria, setIsSubmittingCriteria] = useState(false);
-  const [isSubmittingPriorities, setIsSubmittingPriorities] = useState(false);
 
   // 에러 메시지
   const [error, setError] = useState("");
@@ -90,9 +84,6 @@ export function ComparisonDialog({
             productCount: selectedProducts.length,
             products: selectedProducts,
             criteria: task.report!.user_criteria,
-            userPriorities: Object.keys(task.report!.user_priorities).sort(
-              (a, b) => task.report!.user_priorities[a] - task.report!.user_priorities[b]
-            ),
             reportData: task.report,
           });
 
@@ -109,7 +100,6 @@ export function ComparisonDialog({
         // 상태 초기화
         setCriteriaInput("");
         setCriteriaList([]);
-        setSelectedPriorities([]);
         setError("");
       }, 2000);
     }
@@ -129,7 +119,7 @@ export function ComparisonDialog({
     setCriteriaList(criteriaList.filter((c) => c !== criterion));
   };
 
-  // Step 1: 기준 전송
+  // 기준 전송 및 비교 진행
   const handleSubmitCriteria = async () => {
     if (criteriaList.length === 0) {
       setError("최소 1개 이상의 비교 기준을 입력해주세요");
@@ -139,7 +129,7 @@ export function ComparisonDialog({
     setError("");
     setIsSubmittingCriteria(true);
     try {
-      const result = await continueStep1(criteriaList);
+      const result = await submitCriteria(criteriaList);
       if (!result.success) {
         setError(result.error || "기준 전송에 실패했습니다");
       }
@@ -148,47 +138,10 @@ export function ComparisonDialog({
     }
   };
 
-  // Step 2: 우선순위 토글
-  const handleTogglePriority = (criterion: string) => {
-    if (selectedPriorities.includes(criterion)) {
-      setSelectedPriorities(selectedPriorities.filter((c) => c !== criterion));
-    } else {
-      if (selectedPriorities.length < 5) {
-        setSelectedPriorities([...selectedPriorities, criterion]);
-      }
-    }
-  };
-
-  // Step 2: 우선순위 전송
-  const handleSubmitPriorities = async () => {
-    if (selectedPriorities.length === 0) {
-      setError("최소 1개 이상의 기준을 선택해주세요");
-      return;
-    }
-
-    setError("");
-    setIsSubmittingPriorities(true);
-
-    try {
-      // 우선순위를 { [criterion]: priority } 형태로 변환
-      const priorities: { [key: string]: number } = {};
-      selectedPriorities.forEach((criterion, index) => {
-        priorities[criterion] = index + 1;
-      });
-
-      const result = await continueStep2(priorities);
-      if (!result.success) {
-        setError(result.error || "우선순위 전송에 실패했습니다");
-      }
-    } finally {
-      setIsSubmittingPriorities(false);
-    }
-  };
-
   // 템플릿 선택 핸들러
   const handleSelectTemplate = (template: ComparisonTemplate) => {
-    // 템플릿의 우선순위를 기준 목록으로 설정
-    setCriteriaList(template.priorities);
+    // 템플릿의 기준을 기준 목록으로 설정
+    setCriteriaList(template.priorities);  // 기존 priorities 필드 재사용 (기준 리스트 의미)
     setShowTemplateDialog(false);
   };
 
@@ -267,7 +220,7 @@ export function ComparisonDialog({
     }
 
     // Step 1: 비교 기준 입력
-    if (task.status === "step1" && !task.extractedCriteria) {
+    if (task.status === "step1") {
       // 로딩 중일 때
       if (isSubmittingCriteria) {
         return (
@@ -360,108 +313,7 @@ export function ComparisonDialog({
       );
     }
 
-    // Step 1 처리 중
-    if (task.status === "step1" && task.extractedCriteria) {
-      return (
-        <div className="text-center py-8">
-          <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-sm text-primary-600">{task.message}</p>
-        </div>
-      );
-    }
-
-    // Step 2: 우선순위 선택
-    if (task.status === "step2") {
-      return (
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold text-primary-800 mb-2">
-              우선순위 선택
-            </h3>
-            <p className="text-sm text-primary-600 mb-4">
-              추출된 비교 기준 중 중요한 순서대로 최대 5개를 선택하세요
-              <br />
-              선택한 순서대로 우선순위가 부여됩니다
-            </p>
-
-            {/* 추출된 기준 목록 */}
-            {task.extractedCriteria && (
-              <Card className="mb-4">
-                <h4 className="text-sm font-medium text-primary-700 mb-3">
-                  비교 기준 ({selectedPriorities.length}/5 선택됨)
-                </h4>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {task.extractedCriteria.map((criterion, index) => {
-                    const priorityIndex = selectedPriorities.indexOf(criterion);
-                    const isSelected = priorityIndex !== -1;
-
-                    return (
-                      <label
-                        key={index}
-                        className={`flex items-center gap-3 p-3 rounded-md cursor-pointer border-2 transition-colors ${
-                          isSelected
-                            ? "bg-primary-50 border-primary-400"
-                            : "bg-white border-warm-200 hover:bg-warm-50"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleTogglePriority(criterion)}
-                          disabled={
-                            !isSelected && selectedPriorities.length >= 5
-                          }
-                          className="w-4 h-4"
-                        />
-                        {isSelected && (
-                          <span className="flex items-center justify-center w-6 h-6 bg-primary-500 text-white text-xs font-bold rounded-full">
-                            {priorityIndex + 1}
-                          </span>
-                        )}
-                        <span className="text-sm text-primary-800 flex-1">
-                          {criterion}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </Card>
-            )}
-
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 mb-4">
-                {error}
-              </div>
-            )}
-
-            {/* 버튼 그룹 */}
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setTemplateDialogMode('save');
-                  setShowTemplateDialog(true);
-                }}
-                disabled={selectedPriorities.length === 0}
-                className="flex-1"
-              >
-                템플릿으로 저장
-              </Button>
-              <Button
-                onClick={handleSubmitPriorities}
-                disabled={selectedPriorities.length === 0 || isSubmittingPriorities}
-                className="flex-1"
-              >
-                {isSubmittingPriorities ? "전송 중..." : `비교 시작 (${selectedPriorities.length}개)`}
-              </Button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Step 2 처리 중 (최종 분석)
+    // analyzing 상태 처리
     if (task.status === "analyzing") {
       return (
         <div className="text-center py-8">
@@ -492,7 +344,7 @@ export function ComparisonDialog({
       <TemplateDialog
         isOpen={showTemplateDialog}
         mode={templateDialogMode}
-        priorities={templateDialogMode === 'save' ? selectedPriorities : undefined}
+        priorities={templateDialogMode === 'save' ? criteriaList : undefined}
         category={category}
         templates={templates}
         onSave={handleSaveAsTemplate}

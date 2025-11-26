@@ -51,34 +51,12 @@ export function useComparisonTask(polling = true) {
     }
   }, [fetchTask]);
 
-  // Step 1: 사용자 기준 전송
-  const continueStep1 = useCallback(async (userCriteria: string[]) => {
+  // 사용자 기준 전송 (비교 진행)
+  const submitCriteria = useCallback(async (userCriteria: string[]) => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: "CONTINUE_COMPARISON_STEP1",
+        type: "SUBMIT_COMPARISON_CRITERIA",
         userCriteria,
-      });
-
-      if (response.success) {
-        await fetchTask();
-        return { success: true };
-      } else {
-        return { success: false, error: response.error };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "알 수 없는 오류",
-      };
-    }
-  }, [fetchTask]);
-
-  // Step 2: 우선순위 전송
-  const continueStep2 = useCallback(async (priorities: { [key: string]: number }) => {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "CONTINUE_COMPARISON_STEP2",
-        priorities,
       });
 
       if (response.success) {
@@ -115,8 +93,7 @@ export function useComparisonTask(polling = true) {
     task,
     loading,
     startComparison,
-    continueStep1,
-    continueStep2,
+    submitCriteria,
     refresh: fetchTask,
   };
 }

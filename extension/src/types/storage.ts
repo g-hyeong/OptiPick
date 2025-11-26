@@ -84,9 +84,8 @@ export interface TaskStorage {
  */
 export type ComparisonTaskStatus =
   | 'idle'
-  | 'step1' // Agent에 사용자 기준 전송 대기
-  | 'step2' // Agent가 추출한 기준으로 우선순위 입력 대기
-  | 'analyzing' // 최종 분석 중
+  | 'step1' // 사용자 기준 입력 대기
+  | 'analyzing' // 비교 분석 중
   | 'completed'
   | 'failed';
 
@@ -102,16 +101,12 @@ export interface ComparisonTask {
   selectedProductIds: string[];
   /** 사용자가 입력한 중요 기준 */
   userCriteria: string[];
-  /** 사용자가 선택한 우선순위 (순서대로 1~5개) */
-  userPriorities?: string[];
   /** 작업 상태 */
   status: ComparisonTaskStatus;
   /** 진행 메시지 */
   message: string;
   /** Agent API thread ID */
   threadId?: string;
-  /** Agent가 추출한 전체 비교 기준 */
-  extractedCriteria?: string[];
   /** 최종 비교 리포트 */
   report?: import('./content').ComparisonReportData;
   /** 에러 메시지 (실패 시) */
