@@ -27,6 +27,7 @@ class ParsedContent(TypedDict, total=False):
     # 도메인 특화 파서 (구조화된 데이터)
     product_name: str  # 제품명
     price: str  # 가격
+    thumbnail: str  # 대표 이미지 URL
     description_texts: list[ExtractedText]  # 텍스트 설명/특징 배열 (tagName, position 포함)
     description_images: list[ExtractedImage]  # 이미지 설명 배열
 

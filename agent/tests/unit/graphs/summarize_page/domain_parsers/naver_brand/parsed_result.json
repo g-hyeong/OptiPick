@@ -1,0 +1,83 @@
+{
+  "domain_type": "naver_brand",
+  "product_name": "코스타리카 볼칸 아술 SL28 무산소 내추럴(200g) [원산지:코스타리카]",
+  "price": "22,000원",
+  "thumbnail": "https://shop-phinf.pstatic.net/20251113_197/1763026339416p5X8I_PNG/97159200518856424_269125662.png?type=m1000_pd",
+  "description_texts": [
+    {
+      "content": "랭킹순리뷰의 텍스트, 첨부된 포토/동영상, 최신 작성일 등을 점수화하여 정렬됩니다.",
+      "tagName": "review",
+      "position": 0.0
+    },
+    {
+      "content": "향은\n달달하면서\n맑고 빨간, 보라향이 올라옵니다.\n\n\n질감은\n부드러운 편입니다.\n\n\n맛은\n상큼한 포도의 맛이\n강렬하게 넘어옵니다.\n\n체리, 석류 같기도 한\n빨간색 산미가 선명하게 나타나고\n\n상콤한 포도의 맛이\n약간 묵직하면서도 선명하게 느껴집니다.\n\n뒤에\n오래가는 산미의 느낌과\n은은한 설탕물 단맛이\n입안에서 계속 섞입니다.\n\n식을수록 앞의 맛도 선명해지지만\n뒤의 맛이 묵직해지면서\n약간 과일이 들어간 다크초콜렛 느낌도 듭니다.\n\n아주 약한 떫은 맛도\n마치 와인의 탄닌감 처럼 느껴져서\n전반적으로\n레드와인스럽기도 합니다.\n\n월요일 아침\n눈을 번떡 뜨게 만들정도로\n선명하면서 강렬한 빨간 맛이\n직관적인 커피였습니다.",
+      "tagName": "review",
+      "position": 1.0
+    },
+    {
+      "content": "코스타리카 좋아여! 얼라리오도 좋아요!",
+      "tagName": "review",
+      "position": 2.0
+    },
+    {
+      "content": "올해도 엘 라우렐 마시네요! 감사합니다",
+      "tagName": "review",
+      "position": 3.0
+    },
+    {
+      "content": "400~500g 이면 한 달 넉넉하게 먹을 수 있어요. 신선도가 약간 떨어지긴 하지만 충분히 맛있었습니다.",
+      "tagName": "review",
+      "position": 4.0
+    },
+    {
+      "content": "매번 다양한 원두 라인업이 만족스럽습니다.",
+      "tagName": "review",
+      "position": 5.0
+    },
+    {
+      "content": "항상 감사합니다. 맛있게 잘먹을게요!!",
+      "tagName": "review",
+      "position": 6.0
+    },
+    {
+      "content": "꾸준히 좋은 원두 팔아주셔서 감사합니당",
+      "tagName": "review",
+      "position": 7.0
+    },
+    {
+      "content": "첼베사는 국밥 올해는 어떨지 기대됩니다",
+      "tagName": "review",
+      "position": 8.0
+    }
+  ],
+  "description_images": [
+    {
+      "src": "https://shop-phinf.pstatic.net/20251104_260/1762260348644pp1Ft_JPEG/tmp1513453913110986458.jpg?type=w860",
+      "alt": "",
+      "width": 0.0,
+      "height": 0.0,
+      "position": 0.0
+    },
+    {
+      "src": "https://shop-phinf.pstatic.net/20251104_252/1762260340355iCDW2_JPEG/tmp5068703539940355830.jpg?type=w860",
+      "alt": "",
+      "width": 0.0,
+      "height": 0.0,
+      "position": 1.0
+    },
+    {
+      "src": "https://shop-phinf.pstatic.net/20250710_219/1752145597705LhKr8_PNG/%EC%95%88%EB%82%B4%EC%82%AC%ED%95%AD3.png?type=w860",
+      "alt": "",
+      "width": 0.0,
+      "height": 0.0,
+      "position": 2.0
+    },
+    {
+      "src": "https://shop-phinf.pstatic.net/20250910_262/1757495816022AegtT_PNG/%EB%A0%88%EC%8B%9C%ED%94%BC4.png?type=w860",
+      "alt": "",
+      "width": 0.0,
+      "height": 0.0,
+      "position": 3.0
+    }
+  ]
+}

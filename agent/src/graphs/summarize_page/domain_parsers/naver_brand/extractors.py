@@ -1,85 +1,222 @@
 """네이버 브랜드스토어 파싱 헬퍼 함수들
 
-TODO: 실제 파싱 로직 구현 필요
-
-이 파일에는 네이버 브랜드스토어의 HTML 구조에 맞는
-데이터 추출 함수들을 구현해야 합니다.
-
-파싱 대상:
-1. 제품명
-2. 가격
-3. 텍스트 설명/특징 배열
-4. 이미지 설명 배열
+HTML에서 제품 정보를 추출하는 함수들
+- CSS selector 기반 직접 파싱
+- 제품명, 가격, 리뷰 텍스트, 상세 이미지 추출
 """
+
+import re
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
 
 from ...state import ExtractedText, ExtractedImage
 
 
-def extract_product_name(texts: list[ExtractedText]) -> str:
+def extract_product_name(soup: BeautifulSoup, title: str) -> str:
     """
     제품명 추출
 
-    TODO: 구현 필요
-    - 특정 CSS 선택자나 패턴으로 제품명 추출
-    - 네이버 브랜드스토어의 HTML 구조 분석 필요
+    전략:
+    1. div#content 내부의 첫 번째 h3 태그 (상품명 영역)
+    2. Fallback: 페이지 title
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
+        title: 페이지 제목
 
     Returns:
         str: 제품명
     """
-    return "TODO"
+    # div#content 내부의 첫 번째 h3 태그에서 상품명 추출
+    content = soup.find(id="content")
+    if content:
+        h3 = content.find("h3")
+        if h3:
+            text = h3.get_text(strip=True)
+            if text and len(text) > 5:
+                return text
+
+    # Fallback: 페이지 title에서 스토어명 제거
+    if title and " : " in title:
+        return title.split(" : ")[0].strip()
+
+    return title
 
 
-def extract_price(texts: list[ExtractedText]) -> str:
+def extract_price(soup: BeautifulSoup) -> str:
     """
     가격 추출
 
-    TODO: 구현 필요
-    - 가격 패턴 매칭 (예: "₩1,000", "10,000원")
-    - 할인가, 정상가 구분
+    전략:
+    1. "상품 가격" 라벨 다음의 숫자 + 원 조합
+    2. HTML에서 정규표현식으로 가격 패턴 추출
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
 
     Returns:
-        str: 가격
+        str: 가격 문자열 (예: "22,000원")
     """
-    return "TODO"
+    # 1. "상품 가격" blind 라벨 다음의 형제 요소에서 추출
+    price_label = soup.find("span", class_="blind", string="상품 가격")
+    if price_label:
+        # 다음 형제 요소들에서 숫자와 "원" 조합
+        price_num = ""
+        for sibling in price_label.find_next_siblings():
+            text = sibling.get_text(strip=True)
+            if text.replace(",", "").isdigit():
+                price_num = text
+            elif text == "원" and price_num:
+                return f"{price_num}원"
+
+    # 2. HTML 문자열에서 정규표현식으로 추출
+    # 패턴: >숫자,숫자</span><span ...>원<
+    html_str = str(soup)
+    price_pattern = re.compile(r'>(\d{1,3}(?:,\d{3})+|\d+)</span><span[^>]*>원<')
+    match = price_pattern.search(html_str)
+    if match:
+        return f"{match.group(1)}원"
+
+    return ""
 
 
-def extract_description_texts(texts: list[ExtractedText]) -> list[str]:
+def extract_thumbnail(soup: BeautifulSoup, base_url: str) -> str:
     """
-    텍스트 설명/특징 배열 추출
+    대표 이미지(썸네일) URL 추출
 
-    TODO: 구현 필요
-    - 제품 상세 설명 영역 식별
-    - 특징, 스펙, 사용법 등 텍스트를 배열로 수집
-    - 불필요한 마케팅 문구 필터링
+    전략:
+    1. alt="대표이미지" 속성을 가진 img 태그
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
+        base_url: 기준 URL
 
     Returns:
-        list[str]: 텍스트 설명/특징 배열
+        str: 썸네일 이미지 URL
     """
-    return ["TODO"]
+    # alt="대표이미지" 속성으로 찾기
+    img = soup.find("img", alt="대표이미지")
+    if img:
+        src = img.get("src") or img.get("data-src")
+        if src:
+            return urljoin(base_url, src)
+
+    return ""
 
 
-def extract_description_images(images: list[ExtractedImage]) -> list[ExtractedImage]:
+def extract_review_texts(soup: BeautifulSoup) -> list[ExtractedText]:
     """
-    이미지 설명 배열 추출
+    리뷰 텍스트 추출
 
-    TODO: 구현 필요
-    - 제품 설명에 사용되는 이미지들 필터링
-    - 썸네일, 배너, 광고 이미지 제외
-    - 실제 제품 설명/특징을 보여주는 이미지만 선별
+    #REVIEW 영역 기반으로 리뷰 추출 (안정적인 ID 사용)
+    각 리뷰 li에서 가장 긴 텍스트 블록만 추출 (실제 리뷰 내용)
 
     Args:
-        images: 추출된 이미지 목록
+        soup: BeautifulSoup 객체
 
     Returns:
-        list[ExtractedImage]: 이미지 설명 배열
+        list[ExtractedText]: 리뷰 텍스트 배열
     """
-    return []
+    texts: list[ExtractedText] = []
+    seen_texts: set[str] = set()  # 중복 제거용
+    position = 0
+
+    # #REVIEW 영역 찾기 (안정적인 ID)
+    review_section = soup.find(id="REVIEW")
+    if not review_section:
+        return texts
+
+    # 리뷰 아이템들 (li 태그)
+    review_items = review_section.find_all("li")
+
+    for item in review_items:
+        # 각 li에서 가장 긴 텍스트 블록을 찾음 (실제 리뷰 내용)
+        longest_text = ""
+        for element in item.find_all(["div", "span"]):
+            # 자식 요소가 없는 말단 노드만 검사
+            if element.find(["div", "span"]) is None:
+                text = element.get_text(strip=True)
+                if text and len(text) > len(longest_text):
+                    longest_text = text
+
+        # 20자 이상의 텍스트만 리뷰로 간주
+        if (
+            longest_text
+            and len(longest_text) > 20
+            and longest_text not in seen_texts
+        ):
+            seen_texts.add(longest_text)
+            texts.append(
+                ExtractedText(
+                    content=longest_text,
+                    tagName="review",
+                    position=float(position),
+                )
+            )
+            position += 1
+
+    return texts
+
+
+def extract_description_images(soup: BeautifulSoup, base_url: str) -> list[ExtractedImage]:
+    """
+    제품 상세 설명 이미지 추출
+
+    div.se-main-container 내부의 img.se-image-resource 추출
+
+    Args:
+        soup: BeautifulSoup 객체
+        base_url: 기준 URL (상대 경로 변환용)
+
+    Returns:
+        list[ExtractedImage]: 상세 설명 이미지 배열
+    """
+    images: list[ExtractedImage] = []
+
+    # 상세 설명 컨테이너 찾기
+    detail_container = soup.find("div", class_="se-main-container")
+
+    if detail_container:
+        # se-image-resource 클래스의 이미지만 추출
+        img_tags = detail_container.find_all("img", class_="se-image-resource")
+        for idx, img in enumerate(img_tags):
+            src = img.get("src") or img.get("data-src")
+            if not src:
+                continue
+
+            # shop-phinf 도메인 이미지만
+            if "shop-phinf.pstatic.net" not in src:
+                continue
+
+            absolute_url = urljoin(base_url, src)
+
+            images.append(
+                ExtractedImage(
+                    src=absolute_url,
+                    alt=img.get("alt", ""),
+                    width=parse_dimension(img.get("width")),
+                    height=parse_dimension(img.get("height")),
+                    position=float(idx),
+                )
+            )
+
+    return images
+
+
+def parse_dimension(value: str | None) -> float:
+    """
+    이미지 크기 문자열을 float로 변환
+
+    Args:
+        value: 크기 값 (예: "100", "100px")
+
+    Returns:
+        float: 숫자 값
+    """
+    if not value:
+        return 0.0
+    try:
+        return float(re.sub(r"[^\d.]", "", str(value)) or 0)
+    except ValueError:
+        return 0.0

@@ -1,7 +1,20 @@
 """네이버 브랜드스토어 파서"""
 
+import logging
+
+from bs4 import BeautifulSoup
+
 from ..base import BaseDomainParser
-from ...state import ParsedContent, ExtractedText, ExtractedImage
+from ...state import ParsedContent
+from .extractors import (
+    extract_product_name,
+    extract_price,
+    extract_thumbnail,
+    extract_review_texts,
+    extract_description_images,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class NaverBrandParser(BaseDomainParser):
@@ -24,31 +37,35 @@ class NaverBrandParser(BaseDomainParser):
         """
         네이버 브랜드스토어 페이지 파싱
 
-        TODO: 실제 파싱 로직 구현 필요
-        - BeautifulSoup으로 HTML 파싱
-        - CSS 선택자를 사용하여 네이버 브랜드스토어 특화 정보 추출
-        - 제품명, 가격, 텍스트 설명/특징, 이미지 설명 추출
+        파싱 전략:
+        CSS selector 기반 직접 파싱으로 제품명, 가격, 썸네일, 리뷰 추출
 
         Args:
             url: 페이지 URL
             title: 페이지 제목
-            html_body: 정제된 HTML body
+            html_body: HTML body
 
         Returns:
             ParsedContent: 파싱 결과
         """
-        # TODO: 실제 파싱 로직 구현
-        # from bs4 import BeautifulSoup
-        # soup = BeautifulSoup(html_body, 'lxml')
-        #
-        # product_name = soup.select_one('...').get_text() if soup.select_one('...') else "TODO"
-        # price = soup.select_one('...').get_text() if soup.select_one('...') else "TODO"
-        # ...
+        soup = BeautifulSoup(html_body, "lxml")
+
+        # 각 필드 추출
+        product_name = extract_product_name(soup, title)
+        price = extract_price(soup)
+        thumbnail = extract_thumbnail(soup, url)
+        description_texts = extract_review_texts(soup)
+        description_images = extract_description_images(soup, url)
+
+        logger.info(
+            f"NaverBrandParser: product_name={product_name[:30] if product_name else ''}..., price={price}"
+        )
 
         return ParsedContent(
             domain_type=self.domain_type,
-            product_name="TODO",
-            price="TODO",
-            description_texts=["TODO"],
-            description_images=[],
+            product_name=product_name,
+            price=price,
+            thumbnail=thumbnail,
+            description_texts=description_texts,
+            description_images=description_images,
         )
