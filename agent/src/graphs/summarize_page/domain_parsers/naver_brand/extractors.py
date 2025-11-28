@@ -187,10 +187,6 @@ def extract_description_images(soup: BeautifulSoup, base_url: str) -> list[Extra
             if not src:
                 continue
 
-            # shop-phinf 도메인 이미지만
-            if "shop-phinf.pstatic.net" not in src:
-                continue
-
             absolute_url = urljoin(base_url, src)
 
             images.append(
