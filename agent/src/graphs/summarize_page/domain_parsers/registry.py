@@ -67,10 +67,8 @@ def _register_all_parsers(registry: ParserRegistry):
     """
     from .naver_brand import NaverBrandParser
     from .naver_smartstore import NaverSmartstoreParser
+    from .coupang_product import CoupangProductParser
 
     registry.register(NaverBrandParser())
     registry.register(NaverSmartstoreParser())
-
-    # TODO: 도메인 특화 파서들이 구현되면 주석 해제
-    # from .coupang_product import CoupangProductParser
-    # registry.register(CoupangProductParser())
+    registry.register(CoupangProductParser())

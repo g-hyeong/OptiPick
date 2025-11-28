@@ -1,85 +1,201 @@
 """쿠팡 상품 파싱 헬퍼 함수들
 
-TODO: 실제 파싱 로직 구현 필요
-
-이 파일에는 쿠팡 상품 페이지의 HTML 구조에 맞는
-데이터 추출 함수들을 구현해야 합니다.
-
-파싱 대상:
-1. 제품명
-2. 가격
-3. 텍스트 설명/특징 배열
-4. 이미지 설명 배열
+HTML에서 제품 정보를 추출하는 함수들
+- product_name: h1.product-title
+- price: div.price-amount 또는 div.final-price-amount
+- review: div.product-review 안의 텍스트들
+- images: div.product-detail-content 안의 img들
 """
+
+import re
+from urllib.parse import urljoin
+
+from bs4 import BeautifulSoup
 
 from ...state import ExtractedText, ExtractedImage
 
 
-def extract_product_name(texts: list[ExtractedText]) -> str:
+def extract_product_name(soup: BeautifulSoup, title: str) -> str:
     """
     제품명 추출
 
-    TODO: 구현 필요
-    - 쿠팡의 상품명 영역 식별
-    - 쿠팡 상품 페이지의 HTML 구조 분석 필요
+    전략:
+    1. h1.product-title 태그
+    2. Fallback: 페이지 title
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
+        title: 페이지 제목
 
     Returns:
         str: 제품명
     """
-    return "TODO"
+    # h1.product-title에서 추출
+    h1 = soup.find("h1", class_="product-title")
+    if h1:
+        text = h1.get_text(strip=True)
+        if text:
+            return text
+
+    return title
 
 
-def extract_price(texts: list[ExtractedText]) -> str:
+def extract_price(soup: BeautifulSoup) -> str:
     """
     가격 추출
 
-    TODO: 구현 필요
-    - 쿠팡의 가격 표시 패턴 매칭
-    - 할인가, 로켓배송 가격 등 처리
+    전략:
+    1. div.final-price-amount (최종 할인가)
+    2. div.price-amount (일반 가격)
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
 
     Returns:
-        str: 가격
+        str: 가격 문자열 (예: "1,990원")
     """
-    return "TODO"
+    # final-price-amount 우선
+    price_elem = soup.find("div", class_="final-price-amount")
+    if not price_elem:
+        price_elem = soup.find("div", class_="price-amount")
+
+    if price_elem:
+        text = price_elem.get_text(strip=True)
+        if text:
+            return text
+
+    return ""
 
 
-def extract_description_texts(texts: list[ExtractedText]) -> list[str]:
+def extract_thumbnail(soup: BeautifulSoup, base_url: str) -> str:
     """
-    텍스트 설명/특징 배열 추출
+    대표 이미지(썸네일) URL 추출
 
-    TODO: 구현 필요
-    - 상품 상세 정보 영역 식별
-    - 특징, 스펙, 사용법 등 텍스트를 배열로 수집
-    - 불필요한 광고 문구 필터링
+    전략:
+    1. alt="Product image" 속성을 가진 img 태그
 
     Args:
-        texts: 추출된 텍스트 목록
+        soup: BeautifulSoup 객체
+        base_url: 기준 URL
 
     Returns:
-        list[str]: 텍스트 설명/특징 배열
+        str: 썸네일 이미지 URL
     """
-    return ["TODO"]
+    product_img = soup.find("img", alt="Product image")
+    if product_img:
+        src = product_img.get("src") or product_img.get("data-src")
+        if src:
+            return urljoin(base_url, src)
+
+    return ""
 
 
-def extract_description_images(images: list[ExtractedImage]) -> list[ExtractedImage]:
+def extract_review_texts(soup: BeautifulSoup) -> list[ExtractedText]:
     """
-    이미지 설명 배열 추출
+    리뷰 텍스트 추출
 
-    TODO: 구현 필요
-    - 제품 설명에 사용되는 이미지들 필터링
-    - 썸네일, 배너, 광고 이미지 제외
-    - 실제 제품 설명/특징을 보여주는 이미지만 선별
+    span.twc-bg-white 요소에서 리뷰 본문 텍스트 추출
+    br 태그는 공백으로 치환
 
     Args:
-        images: 추출된 이미지 목록
+        soup: BeautifulSoup 객체
 
     Returns:
-        list[ExtractedImage]: 이미지 설명 배열
+        list[ExtractedText]: 리뷰 텍스트 배열
     """
-    return []
+    texts: list[ExtractedText] = []
+    seen_texts: set[str] = set()
+    position = 0
+
+    # span.twc-bg-white 요소들에서 리뷰 본문 추출
+    review_spans = soup.find_all("span", class_="twc-bg-white")
+
+    for span in review_spans:
+        # br 태그를 공백으로 치환
+        for br in span.find_all("br"):
+            br.replace_with(" ")
+
+        text = span.get_text(strip=True)
+        # 연속 공백 정리
+        text = re.sub(r"\s+", " ", text)
+
+        # 20자 이상의 텍스트만 리뷰로 간주
+        if text and len(text) > 20 and text not in seen_texts:
+            seen_texts.add(text)
+            texts.append(
+                ExtractedText(
+                    content=text,
+                    tagName="review",
+                    position=float(position),
+                )
+            )
+            position += 1
+
+    return texts
+
+
+def extract_description_images(soup: BeautifulSoup, base_url: str) -> list[ExtractedImage]:
+    """
+    제품 상세 설명 이미지 추출
+
+    div.product-detail-content 안의 img 태그들 추출
+
+    Args:
+        soup: BeautifulSoup 객체
+        base_url: 기준 URL
+
+    Returns:
+        list[ExtractedImage]: 상세 설명 이미지 배열
+    """
+    images: list[ExtractedImage] = []
+    seen_urls: set[str] = set()
+
+    detail_content = soup.find("div", class_="product-detail-content")
+    if not detail_content:
+        return images
+
+    idx = 0
+    for img in detail_content.find_all("img"):
+        src = img.get("src") or img.get("data-src") or ""
+
+        # base64 이미지 제외
+        if src.startswith("data:"):
+            continue
+
+        # 중복 제외
+        if src in seen_urls:
+            continue
+
+        seen_urls.add(src)
+        absolute_url = urljoin(base_url, src)
+
+        images.append(
+            ExtractedImage(
+                src=absolute_url,
+                alt=img.get("alt", ""),
+                width=parse_dimension(img.get("width")),
+                height=parse_dimension(img.get("height")),
+                position=float(idx),
+            )
+        )
+        idx += 1
+
+    return images
+
+
+def parse_dimension(value: str | None) -> float:
+    """
+    이미지 크기 문자열을 float로 변환
+
+    Args:
+        value: 크기 값 (예: "100", "100px")
+
+    Returns:
+        float: 숫자 값
+    """
+    if not value:
+        return 0.0
+    try:
+        return float(re.sub(r"[^\d.]", "", str(value)) or 0)
+    except ValueError:
+        return 0.0
