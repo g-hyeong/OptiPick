@@ -141,10 +141,12 @@ def extract_review_texts(soup: BeautifulSoup) -> list[ExtractedText]:
                     longest_text = text
 
         # 20자 이상의 텍스트만 리뷰로 간주
+        # 안내 문구는 제외
         if (
             longest_text
             and len(longest_text) > 20
             and longest_text not in seen_texts
+            and "점수화하여 정렬" not in longest_text
         ):
             seen_texts.add(longest_text)
             texts.append(

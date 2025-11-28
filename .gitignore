@@ -49,3 +49,6 @@ docker-compose.override.yml
 
 logs/
 test.html
+naver*.html
+coupang*.html
+parsed_result.json
