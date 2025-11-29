@@ -56,6 +56,9 @@ class SummarizePageResponse(BaseModel):
     url: str = Field(..., description="페이지 URL")
     title: str = Field(..., description="페이지 제목")
     error: Optional[str] = Field(None, description="에러 메시지 (검증 실패 시)")
+    thumbnail: Optional[str] = Field(
+        None, description="대표 이미지 URL (도메인 파서에서 추출)"
+    )
     valid_images: list[ExtractedImageSchema] = Field(
         default_factory=list, description="유효한 이미지 목록 (OCR 결과 포함)"
     )

@@ -206,13 +206,14 @@ async function executeAnalysisTask(
     });
 
     // 4. 저장
+    // thumbnail 우선, 없으면 valid_images[0] fallback
     const product: Omit<StoredProduct, 'id' | 'addedAt'> = {
       category,
       url: content.url,
       title: content.title,
       price: analysisResult.product_analysis.price,
       summary: analysisResult.product_analysis.summary,
-      thumbnailUrl: analysisResult.valid_images[0]?.src,
+      thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
       fullAnalysis: analysisResult.product_analysis,
     };
 
@@ -484,7 +485,7 @@ async function handleDuplicateChoice(
         title: content.title,
         price: analysisResult.product_analysis.price,
         summary: analysisResult.product_analysis.summary,
-        thumbnailUrl: analysisResult.valid_images[0]?.src,
+        thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
         fullAnalysis: analysisResult.product_analysis,
         extractedAt: Date.now(), // 추출 날짜 갱신
       };
@@ -521,7 +522,7 @@ async function handleDuplicateChoice(
         title: content.title,
         price: analysisResult.product_analysis.price,
         summary: analysisResult.product_analysis.summary,
-        thumbnailUrl: analysisResult.valid_images[0]?.src,
+        thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
         fullAnalysis: analysisResult.product_analysis,
       };
 

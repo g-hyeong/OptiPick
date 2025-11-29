@@ -75,6 +75,10 @@ async def execute_summarize_page(request: SummarizePageRequest):
         valid_images = result.get("valid_images", [])
         product_analysis = result.get("product_analysis", {})
 
+        # 도메인 파서에서 추출한 thumbnail (없으면 None)
+        parsed_content = result.get("parsed_content", {})
+        thumbnail = parsed_content.get("thumbnail")
+
         # 디버그: 유효한 이미지 정보 로깅
         logger.debug(
             "Valid images after filtering",
@@ -128,6 +132,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
         return SummarizePageResponse(
             url=result["url"],
             title=result["title"],
+            thumbnail=thumbnail,
             valid_images=valid_images,
             product_analysis=ProductAnalysisSchema(**product_analysis),
             timestamp=result["timestamp"],

@@ -8,3 +8,4 @@ export { useAnalysisHistory } from "./useAnalysisHistory";
 export { useChrome } from "./useChrome";
 export { useToast } from "./useToast";
 export { useComparisonTask } from "./useComparisonTask";
+export { useCompareState } from "./useCompareState";

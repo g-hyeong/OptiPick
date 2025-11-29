@@ -87,6 +87,8 @@ export interface ProductAnalysis {
 export interface ProductAnalysisResponse {
   url: string;
   title: string;
+  /** 대표 이미지 URL (도메인 파서에서 추출) */
+  thumbnail?: string;
   valid_images: ValidatedImage[];
   product_analysis: ProductAnalysis;
   timestamp: number;
