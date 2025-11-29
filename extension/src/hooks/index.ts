@@ -9,3 +9,4 @@ export { useChrome } from "./useChrome";
 export { useToast } from "./useToast";
 export { useComparisonTask } from "./useComparisonTask";
 export { useCompareState } from "./useCompareState";
+export { useChatbot } from "./useChatbot";

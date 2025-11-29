@@ -1,6 +1,9 @@
-import { useCompareState } from "@/hooks";
+import { useEffect } from "react";
+import { useCompareState, useChatbot } from "@/hooks";
 import { CompareTable, CompareToolbar } from "@/components/compare";
+import { ChatSidebar } from "@/components/chatbot";
 import { Card } from "@/components/ui";
+import type { ProductContext } from "@/types/chatbot";
 
 export function CompareReportPage() {
   // URL 파라미터에서 historyId 추출
@@ -8,7 +11,7 @@ export function CompareReportPage() {
   const historyId = urlParams.get("historyId");
 
   const {
-    state: { report, loading, error, criteriaOrder },
+    state: { report, products, loading, error, criteriaOrder },
     actions: {
       toggleCriterion,
       reorderProducts,
@@ -23,6 +26,23 @@ export function CompareReportPage() {
     orderedVisibleCriteria,
     hiddenProducts,
   } = useCompareState(historyId);
+
+  // 챗봇 상태
+  const chatbot = useChatbot();
+
+  // 리포트 로드 시 챗봇 세션 시작
+  useEffect(() => {
+    if (report && products.length > 0 && historyId && !chatbot.threadId) {
+      // 제품 컨텍스트 변환
+      const productContexts: ProductContext[] = products.map((p) => ({
+        product_name: p.fullAnalysis?.product_name || p.title,
+        price: p.price,
+        raw_content: p.rawContent || "",
+      }));
+
+      chatbot.startSession(productContexts, report.category, historyId);
+    }
+  }, [report, products, historyId]);
 
   // 로딩 상태
   if (loading) {
@@ -137,6 +157,22 @@ export function CompareReportPage() {
           </Card>
         </div>
       </div>
+
+      {/* 챗봇 사이드바 */}
+      <ChatSidebar
+        isOpen={chatbot.isOpen}
+        onToggle={chatbot.toggleSidebar}
+        messages={chatbot.messages}
+        welcomeMessage={chatbot.welcomeMessage}
+        isLoading={chatbot.isLoading}
+        error={chatbot.error}
+        onSendMessage={chatbot.sendMessage}
+        onClearError={chatbot.clearError}
+        sessions={chatbot.sessions}
+        currentThreadId={chatbot.threadId}
+        onNewChat={chatbot.startNewChat}
+        onSwitchSession={chatbot.switchSession}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 
 from src.utils.logger import get_logger
 
-from .routers import summarize_page, compare_products
+from .routers import summarize_page, compare_products, chatbot
 
 logger = get_logger(__name__)
 
@@ -51,6 +51,7 @@ async def health_check():
 # 라우터 등록
 app.include_router(summarize_page.router)
 app.include_router(compare_products.router)
+app.include_router(chatbot.router)
 
 
 # 서버 시작 로깅

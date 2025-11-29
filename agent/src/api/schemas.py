@@ -132,3 +132,54 @@ class CompareProductsContinueResponse(BaseModel):
 
     status: str = Field(..., description="현재 상태")
     report: ComparisonReportSchema | None = Field(None, description="최종 보고서 (완료 시)")
+
+
+# ========== Chatbot 관련 스키마 ==========
+
+
+class ProductContextSchema(BaseModel):
+    """챗봇 제품 컨텍스트"""
+
+    product_name: str = Field(..., description="제품명")
+    price: str = Field(..., description="가격")
+    raw_content: str = Field(..., description="원본 텍스트 콘텐츠")
+
+
+class ChatbotStartRequest(BaseModel):
+    """챗봇 세션 시작 요청"""
+
+    category: str = Field(..., description="제품 카테고리")
+    products: list[ProductContextSchema] = Field(..., description="비교 대상 제품 목록")
+
+
+class ChatbotStartResponse(BaseModel):
+    """챗봇 세션 시작 응답"""
+
+    thread_id: str = Field(..., description="세션 ID")
+    welcome_message: str = Field(..., description="환영 메시지")
+
+
+class ChatbotMessageRequest(BaseModel):
+    """챗봇 메시지 전송 요청"""
+
+    message: str = Field(..., description="사용자 메시지")
+
+
+class ChatbotMessageResponse(BaseModel):
+    """챗봇 메시지 응답"""
+
+    response: str = Field(..., description="챗봇 응답")
+    sources: list[str] = Field(default_factory=list, description="참조한 출처")
+
+
+class ChatMessageSchema(BaseModel):
+    """대화 메시지"""
+
+    role: str = Field(..., description="메시지 역할 (user/assistant)")
+    content: str = Field(..., description="메시지 내용")
+
+
+class ChatbotHistoryResponse(BaseModel):
+    """대화 히스토리 응답"""
+
+    messages: list[ChatMessageSchema] = Field(default_factory=list, description="메시지 목록")
