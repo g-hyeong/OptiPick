@@ -51,10 +51,12 @@ async def domain_parser_node(state: SummarizePageState) -> dict:
         )
 
         # 4. 도메인 특화 파서는 검증을 통과한 것으로 간주
+        # description_images를 images 필드로도 전달 (OCR 노드에서 사용)
         return {
             "is_valid_page": True,
             "validation_error": "",
             "parsed_content": parsed_content,
+            "images": parsed_content.get("description_images", []),
         }
 
     except Exception as e:
