@@ -1,8 +1,11 @@
 """파서 레지스트리 - 도메인별 파서 선택 및 관리"""
 
+import logging
 from typing import Optional
 
 from .base import BaseDomainParser
+
+logger = logging.getLogger(__name__)
 
 
 class ParserRegistry:
@@ -32,11 +35,13 @@ class ParserRegistry:
         """
         for parser in self._parsers:
             if parser.can_parse(url):
+                logger.info(f"Selected parser: {parser.__class__.__name__} for domain_type={parser.domain_type}")
                 return parser
 
         # Fallback: Generic Parser
         from .generic import GenericParser
 
+        logger.info("No matching parser found, using GenericParser")
         return GenericParser()
 
 
