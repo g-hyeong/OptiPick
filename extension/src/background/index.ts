@@ -204,6 +204,7 @@ async function executeAnalysisTask(category: string, tabId: number): Promise<voi
       summary: analysisResult.product_analysis.summary,
       thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
       fullAnalysis: analysisResult.product_analysis,
+      rawContent: analysisResult.llm_input_content,
     };
 
     await saveProduct(product);
@@ -461,6 +462,7 @@ async function handleDuplicateChoice(choice: 'update' | 'save_new' | 'cancel'): 
         summary: analysisResult.product_analysis.summary,
         thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
         fullAnalysis: analysisResult.product_analysis,
+        rawContent: analysisResult.llm_input_content,
       });
 
       await updateTaskState({
@@ -490,6 +492,7 @@ async function handleDuplicateChoice(choice: 'update' | 'save_new' | 'cancel'): 
         summary: analysisResult.product_analysis.summary,
         thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
         fullAnalysis: analysisResult.product_analysis,
+        rawContent: analysisResult.llm_input_content,
       };
 
       await saveProduct(product);

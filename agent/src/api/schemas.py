@@ -66,6 +66,9 @@ class SummarizePageResponse(BaseModel):
         None, description="제품 분석 결과 (검증 실패 시 None)"
     )
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
+    llm_input_content: Optional[str] = Field(
+        None, description="LLM에 전달된 순수 텍스트 내용"
+    )
 
 
 # ========== CompareProducts 관련 스키마 ==========

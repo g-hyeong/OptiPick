@@ -69,6 +69,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
                 valid_images=[],
                 product_analysis=None,
                 timestamp=result["timestamp"],
+                llm_input_content=None,
             )
 
         # 실행 결과 상세 로깅
@@ -136,6 +137,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
             valid_images=valid_images,
             product_analysis=ProductAnalysisSchema(**product_analysis),
             timestamp=result["timestamp"],
+            llm_input_content=result.get("llm_input_content"),
         )
 
     except ConfigurationError as e:

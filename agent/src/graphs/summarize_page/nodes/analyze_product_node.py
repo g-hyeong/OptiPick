@@ -13,6 +13,34 @@ from src.utils.logger import get_logger
 
 from ..state import ExtractedImage, ExtractedText, ProductAnalysis, SummarizePageState
 
+
+def extract_pure_content(texts: List[ExtractedText], images: List[ExtractedImage]) -> str:
+    """순수 텍스트 내용만 추출 (CSV 헤더, 형식 설명, 구분자 모두 제외)
+
+    Args:
+        texts: 추출된 텍스트 리스트
+        images: 추출된 이미지 리스트
+
+    Returns:
+        순수 텍스트 내용 (줄바꿈으로 구분)
+    """
+    lines = []
+
+    # 텍스트 내용 (position 기준 정렬)
+    sorted_texts = sorted(texts, key=lambda t: t.get("position", 0))
+    for text in sorted_texts:
+        content = text.get("content", "").strip()
+        if content:
+            lines.append(content)
+
+    # OCR 내용
+    for img in images:
+        ocr = img.get("ocr_result", "").strip()
+        if ocr:
+            lines.append(ocr)
+
+    return "\n".join(lines)
+
 logger = get_logger(__name__)
 settings = BaseSettings()
 
@@ -157,7 +185,7 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
         # 입력 데이터 검증
         if not texts and not images:
             logger.warning("  No data available, returning default analysis")
-            return {"product_analysis": create_default_analysis()}
+            return {"product_analysis": create_default_analysis(), "llm_input_content": ""}
 
         # 2. 프롬프트 구성 및 입력 데이터 저장
         messages = analyze_product.build_messages(texts, images)
@@ -217,9 +245,12 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
             f"Pros: {len(result.pros)}, Cons: {len(result.cons)}"
         )
 
-        return {"product_analysis": product_analysis}
+        # 5. 순수 텍스트 내용 추출 (Extension 저장용)
+        llm_input_content = extract_pure_content(texts, images)
+
+        return {"product_analysis": product_analysis, "llm_input_content": llm_input_content}
 
     except Exception as e:
         logger.error(f"✗ Analyze product node failed: {str(e)}")
         logger.warning("  Fallback: returning default analysis")
-        return {"product_analysis": create_default_analysis()}
+        return {"product_analysis": create_default_analysis(), "llm_input_content": ""}

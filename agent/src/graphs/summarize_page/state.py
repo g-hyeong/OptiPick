@@ -68,3 +68,6 @@ class SummarizePageState(TypedDict):
 
     # 제품 분석 결과
     product_analysis: ProductAnalysis
+
+    # LLM input 텍스트 (Extension 저장용)
+    llm_input_content: str

@@ -92,6 +92,8 @@ export interface ProductAnalysisResponse {
   valid_images: ValidatedImage[];
   product_analysis: ProductAnalysis;
   timestamp: number;
+  /** LLM에 전달된 순수 텍스트 내용 (Extension 저장용) */
+  llm_input_content?: string;
 }
 
 // ========== 비교 기능 관련 타입 ==========
