@@ -82,7 +82,7 @@ export function ComparisonDialog({
           const historyItem = await addHistoryItem({
             category: task.category,
             productCount: selectedProducts.length,
-            products: selectedProducts,
+            productIds: productIds, // 정규화: ID만 저장
             criteria: task.report!.user_criteria,
             reportData: task.report,
           });

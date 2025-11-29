@@ -1,103 +1,75 @@
-import { useState, useEffect, useCallback } from "react";
-import type { StoredProduct } from "@/types/storage";
-
 /**
- * 제품 목록 관리 Hook
+ * 제품 목록 관리 Hook (IndexedDB via Dexie)
  */
-export function useProducts() {
-  const [products, setProducts] = useState<StoredProduct[]>([]);
-  const [loading, setLoading] = useState(true);
+import { useCallback } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/db';
+import { generateUUID } from '@/utils/storage';
+import type { StoredProduct } from '@/types/storage';
 
-  // 제품 목록 로드
-  const loadProducts = useCallback(async () => {
-    try {
-      setLoading(true);
-      const result = await chrome.storage.local.get("products");
-      setProducts(result.products || []);
-    } catch (error) {
-      console.error("[useProducts] Failed to load products:", error);
-      setProducts([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+export function useProducts() {
+  // useLiveQuery: 실시간 반응형 쿼리 (onChanged 대체)
+  const products = useLiveQuery(
+    () => db.products.orderBy('addedAt').reverse().toArray(),
+    []
+  );
+
+  const loading = products === undefined;
 
   // 제품 추가
-  const addProduct = useCallback(async (product: Omit<StoredProduct, "id" | "addedAt">) => {
-    const newProduct: StoredProduct = {
-      ...product,
-      id: `product_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      addedAt: Date.now(),
-    };
+  const addProduct = useCallback(
+    async (product: Omit<StoredProduct, 'id' | 'addedAt'>) => {
+      const newProduct: StoredProduct = {
+        ...product,
+        id: generateUUID(),
+        addedAt: Date.now(),
+      };
 
-    const updatedProducts = [...products, newProduct];
-    await chrome.storage.local.set({ products: updatedProducts });
-    setProducts(updatedProducts);
-
-    return newProduct;
-  }, [products]);
+      await db.products.add(newProduct);
+      return newProduct;
+    },
+    []
+  );
 
   // 제품 삭제
   const deleteProduct = useCallback(async (productId: string) => {
-    const updatedProducts = products.filter((p) => p.id !== productId);
-    await chrome.storage.local.set({ products: updatedProducts });
-    setProducts(updatedProducts);
-  }, [products]);
+    await db.products.delete(productId);
+  }, []);
 
   // 제품 업데이트
-  const updateProduct = useCallback(async (
-    productId: string,
-    updates: Partial<StoredProduct>
-  ) => {
-    const updatedProducts = products.map((p) =>
-      p.id === productId ? { ...p, ...updates } : p
-    );
-    await chrome.storage.local.set({ products: updatedProducts });
-    setProducts(updatedProducts);
-  }, [products]);
+  const updateProduct = useCallback(
+    async (productId: string, updates: Partial<StoredProduct>) => {
+      await db.products.update(productId, updates);
+    },
+    []
+  );
 
   // 카테고리별 필터링
-  const getProductsByCategory = useCallback((category: string) => {
-    return products.filter((p) => p.category === category);
-  }, [products]);
+  const getProductsByCategory = useCallback(
+    (category: string) => {
+      return (products || []).filter((p) => p.category === category);
+    },
+    [products]
+  );
 
   // 카테고리별 제품 일괄 삭제
   const deleteByCategory = useCallback(async (category: string) => {
-    const updatedProducts = products.filter((p) => p.category !== category);
-    await chrome.storage.local.set({ products: updatedProducts });
-    setProducts(updatedProducts);
-  }, [products]);
+    await db.products.where('category').equals(category).delete();
+  }, []);
 
   // 제품 ID 배열로 일괄 삭제
   const deleteProducts = useCallback(async (productIds: string[]) => {
-    const idsSet = new Set(productIds);
-    const updatedProducts = products.filter((p) => !idsSet.has(p.id));
-    await chrome.storage.local.set({ products: updatedProducts });
-    setProducts(updatedProducts);
-  }, [products]);
+    await db.products.bulkDelete(productIds);
+  }, []);
 
-  // 초기 로드
-  useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
-
-  // Storage 변경 감지
-  useEffect(() => {
-    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
-      if (changes.products) {
-        setProducts(changes.products.newValue || []);
-      }
-    };
-
-    chrome.storage.onChanged.addListener(handleStorageChange);
-
-    return () => {
-      chrome.storage.onChanged.removeListener(handleStorageChange);
-    };
+  // 수동 리로드 (보통 필요 없음, useLiveQuery가 자동 갱신)
+  const reload = useCallback(() => {
+    // useLiveQuery는 자동으로 데이터를 동기화하므로
+    // 이 함수는 호환성을 위해 유지
   }, []);
 
   return {
-    products,
+    products: products || [],
     loading,
     addProduct,
     updateProduct,
@@ -105,6 +77,6 @@ export function useProducts() {
     deleteProducts,
     deleteByCategory,
     getProductsByCategory,
-    reload: loadProducts,
+    reload,
   };
 }

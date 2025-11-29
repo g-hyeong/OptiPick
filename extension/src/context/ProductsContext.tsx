@@ -12,7 +12,7 @@ interface ProductsContextType {
   deleteProducts: (productIds: string[]) => Promise<void>;
   deleteByCategory: (category: string) => Promise<void>;
   getProductsByCategory: (category: string) => StoredProduct[];
-  reload: () => Promise<void>;
+  reload: () => void;
   allCategories: string[];
   recentCategories: string[];
   categoryHistory: Array<{ category: string; count: number; lastUsed: number }>;

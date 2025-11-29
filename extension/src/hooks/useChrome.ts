@@ -1,26 +1,17 @@
-import { useCallback } from "react";
-
 /**
  * Chrome API 래퍼 Hook
+ *
+ * Storage 관련 함수는 IndexedDB (Dexie)로 마이그레이션되었습니다.
+ * - 제품 관련: useProducts hook
+ * - 히스토리 관련: useAnalysisHistory hook
+ * - 템플릿 관련: useTemplates hook
+ * - 카테고리 관련: useCategories hook
  */
+import { useCallback } from 'react';
+
 export function useChrome() {
-  // Storage 읽기
-  const getStorage = useCallback(async <T = any>(keys: string | string[]): Promise<T> => {
-    return chrome.storage.local.get(keys) as Promise<T>;
-  }, []);
-
-  // Storage 쓰기
-  const setStorage = useCallback(async (items: { [key: string]: any }): Promise<void> => {
-    return chrome.storage.local.set(items);
-  }, []);
-
-  // Storage 삭제
-  const removeStorage = useCallback(async (keys: string | string[]): Promise<void> => {
-    return chrome.storage.local.remove(keys);
-  }, []);
-
   // Background worker에 메시지 전송
-  const sendMessage = useCallback(async <T = any>(message: any): Promise<T> => {
+  const sendMessage = useCallback(async <T = unknown>(message: unknown): Promise<T> => {
     return chrome.runtime.sendMessage(message);
   }, []);
 
@@ -36,9 +27,6 @@ export function useChrome() {
   }, []);
 
   return {
-    getStorage,
-    setStorage,
-    removeStorage,
     sendMessage,
     getCurrentTab,
     openTab,

@@ -4,23 +4,17 @@
  */
 
 import type { ExtractedContent } from '../types/content';
-import type { AnalysisTask, StoredProduct, ComparisonTask } from '../types/storage';
+import type { AnalysisTask, StoredProduct, ComparisonTask, AnalysisHistoryItem } from '../types/storage';
 import { analyzeProduct, startComparison, continueComparison } from '../utils/api';
-import { saveProduct, getProducts } from '../utils/storage';
+import { saveProduct, getProducts, updateProduct } from '../utils/storage';
+import { generateUUID } from '../utils/storage';
+import { db, migrateFromChromeStorage } from '../db';
 
-const TASK_STORAGE_KEY = 'currentTask';
-const COMPARISON_TASK_STORAGE_KEY = 'currentComparisonTask';
-
-/**
- * UUID 생성
- */
-function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-}
+// 임시 데이터 (DB에 저장하지 않음)
+let duplicateCheckData: {
+  duplicateProduct: StoredProduct;
+  extractedContent: ExtractedContent;
+} | null = null;
 
 /**
  * URL 정규화 (쿼리 파라미터 제거)
@@ -40,74 +34,75 @@ function normalizeUrl(url: string): string {
 async function findDuplicateProduct(url: string): Promise<StoredProduct | null> {
   const normalizedUrl = normalizeUrl(url);
   const products = await getProducts();
-
   return products.find((p) => normalizeUrl(p.url) === normalizedUrl) || null;
 }
+
+// ========== 분석 작업 Task 상태 관리 ==========
 
 /**
  * 현재 작업 상태 저장
  */
 async function saveTaskState(task: AnalysisTask | null): Promise<void> {
-  await chrome.storage.local.set({ [TASK_STORAGE_KEY]: task });
+  await db.currentTask.clear();
+  if (task) {
+    await db.currentTask.add(task);
+  }
 }
 
 /**
  * 현재 작업 상태 가져오기
  */
 async function getTaskState(): Promise<AnalysisTask | null> {
-  const result = await chrome.storage.local.get(TASK_STORAGE_KEY);
-  return result[TASK_STORAGE_KEY] || null;
+  const tasks = await db.currentTask.toArray();
+  return tasks[0] || null;
 }
 
 /**
  * 작업 상태 업데이트
  */
-async function updateTaskState(
-  updates: Partial<AnalysisTask>
-): Promise<void> {
+async function updateTaskState(updates: Partial<AnalysisTask>): Promise<void> {
   const currentTask = await getTaskState();
   if (currentTask) {
-    const updatedTask = { ...currentTask, ...updates };
-    await saveTaskState(updatedTask);
+    await db.currentTask.update(currentTask.taskId, updates);
   }
 }
 
-// ========== 비교 작업 관련 Storage 함수 ==========
+// ========== 비교 작업 Task 상태 관리 ==========
 
 /**
  * 비교 작업 상태 저장
  */
 async function saveComparisonTaskState(task: ComparisonTask | null): Promise<void> {
-  await chrome.storage.local.set({ [COMPARISON_TASK_STORAGE_KEY]: task });
+  await db.currentComparisonTask.clear();
+  if (task) {
+    await db.currentComparisonTask.add(task);
+  }
 }
 
 /**
  * 비교 작업 상태 가져오기
  */
 async function getComparisonTaskState(): Promise<ComparisonTask | null> {
-  const result = await chrome.storage.local.get(COMPARISON_TASK_STORAGE_KEY);
-  return result[COMPARISON_TASK_STORAGE_KEY] || null;
+  const tasks = await db.currentComparisonTask.toArray();
+  return tasks[0] || null;
 }
 
 /**
  * 비교 작업 상태 업데이트
  */
-async function updateComparisonTaskState(
-  updates: Partial<ComparisonTask>
-): Promise<void> {
+async function updateComparisonTaskState(updates: Partial<ComparisonTask>): Promise<void> {
   const currentTask = await getComparisonTaskState();
   if (currentTask) {
-    const updatedTask = { ...currentTask, ...updates };
-    await saveComparisonTaskState(updatedTask);
+    await db.currentComparisonTask.update(currentTask.taskId, updates);
   }
 }
+
+// ========== 콘텐츠 추출 ==========
 
 /**
  * Content Script에서 콘텐츠 추출
  */
-async function extractContentFromTab(
-  tabId: number
-): Promise<ExtractedContent> {
+async function extractContentFromTab(tabId: number): Promise<ExtractedContent> {
   // Content Script 준비 확인
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'PING' });
@@ -136,19 +131,18 @@ async function extractContentFromTab(
   });
 
   if (!response.success) {
-    throw new Error(response.error || '콘텐츠 추출 실패');
+    throw new Error(response.error || 'Content extraction failed');
   }
 
   return response.data;
 }
 
+// ========== 분석 작업 실행 ==========
+
 /**
  * 분석 작업 실행
  */
-async function executeAnalysisTask(
-  category: string,
-  tabId: number
-): Promise<void> {
+async function executeAnalysisTask(category: string, tabId: number): Promise<void> {
   const taskId = generateUUID();
 
   try {
@@ -168,25 +162,21 @@ async function executeAnalysisTask(
     const content = await extractContentFromTab(tabId);
 
     // 3. 중복 체크
-    const duplicateProduct = await findDuplicateProduct(content.url);
+    const duplicate = await findDuplicateProduct(content.url);
 
-    if (duplicateProduct) {
-      // 중복 발견: 사용자 선택 대기 상태로 전환
-      // duplicateProduct와 extractedContent를 별도 Storage 키에 저장
-      await chrome.storage.local.set({
-        duplicateCheckData: {
-          duplicateProduct,
-          extractedContent: content,
-        }
-      });
+    if (duplicate) {
+      // 중복 발견: 메모리에 임시 저장
+      duplicateCheckData = {
+        duplicateProduct: duplicate,
+        extractedContent: content,
+      };
 
       await updateTaskState({
         url: content.url,
         title: content.title,
-        status: 'waiting_duplicate_choice' as any,
+        status: 'waiting_duplicate_choice' as AnalysisTask['status'],
         message: '중복된 제품이 발견되었습니다. 어떻게 하시겠습니까?',
       });
-      // 여기서 대기 (메시지 핸들러에서 계속 진행)
       return;
     }
 
@@ -205,8 +195,7 @@ async function executeAnalysisTask(
       message: '분석 결과를 저장하고 있습니다...',
     });
 
-    // 4. 저장
-    // thumbnail 우선, 없으면 valid_images[0] fallback
+    // 5. 저장
     const product: Omit<StoredProduct, 'id' | 'addedAt'> = {
       category,
       url: content.url,
@@ -219,14 +208,14 @@ async function executeAnalysisTask(
 
     await saveProduct(product);
 
-    // 5. 완료
+    // 6. 완료
     await updateTaskState({
       status: 'completed',
       message: `분석 완료! "${analysisResult.product_analysis.product_name}" 제품이 저장되었습니다.`,
       completedAt: Date.now(),
     });
 
-    // 6. 알림 표시
+    // 7. 알림 표시
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icon-128.png',
@@ -234,44 +223,39 @@ async function executeAnalysisTask(
       message: `"${analysisResult.product_analysis.product_name}" 제품이 저장되었습니다.`,
     });
 
-    // 7. 3초 후 작업 상태 초기화
+    // 8. 3초 후 작업 상태 초기화
     setTimeout(async () => {
       await saveTaskState(null);
     }, 3000);
   } catch (error) {
-    console.error('분석 작업 실패:', error);
+    console.error('Analysis task failed:', error);
 
     await updateTaskState({
       status: 'failed',
       message: '분석 실패',
-      error: error instanceof Error ? error.message : '알 수 없는 오류',
+      error: error instanceof Error ? error.message : 'Unknown error',
       completedAt: Date.now(),
     });
 
-    // 에러 알림
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icon-128.png',
       title: '제품 분석 실패',
-      message: error instanceof Error ? error.message : '알 수 없는 오류',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
 
-    // 5초 후 작업 상태 초기화
     setTimeout(async () => {
       await saveTaskState(null);
     }, 5000);
   }
 }
 
-// ========== 비교 작업 실행 함수 ==========
+// ========== 비교 작업 실행 ==========
 
 /**
- * 비교 작업 시작 (Step 1 전까지)
+ * 비교 작업 시작
  */
-async function executeComparisonStart(
-  category: string,
-  productIds: string[]
-): Promise<void> {
+async function executeComparisonStart(category: string, productIds: string[]): Promise<void> {
   const taskId = generateUUID();
 
   try {
@@ -289,7 +273,7 @@ async function executeComparisonStart(
 
     // 2. 선택된 제품들 가져오기
     const allProducts = await getProducts();
-    const selectedProducts = allProducts.filter(p => productIds.includes(p.id));
+    const selectedProducts = allProducts.filter((p) => productIds.includes(p.id));
 
     if (selectedProducts.length < 2) {
       throw new Error('최소 2개의 제품을 선택해주세요.');
@@ -302,7 +286,7 @@ async function executeComparisonStart(
     // 3. Agent API 호출 (비교 시작)
     const response = await startComparison({
       category,
-      products: selectedProducts.map(p => p.fullAnalysis),
+      products: selectedProducts.map((p) => p.fullAnalysis),
     });
 
     // 4. thread_id 저장 및 Step 1 대기 상태로 전환
@@ -312,24 +296,22 @@ async function executeComparisonStart(
       message: '비교할 기준을 입력해주세요.',
     });
   } catch (error) {
-    console.error('비교 시작 실패:', error);
+    console.error('Comparison start failed:', error);
 
     await updateComparisonTaskState({
       status: 'failed',
       message: '비교 시작 실패',
-      error: error instanceof Error ? error.message : '알 수 없는 오류',
+      error: error instanceof Error ? error.message : 'Unknown error',
       completedAt: Date.now(),
     });
 
-    // 에러 알림
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icon-128.png',
       title: '비교 시작 실패',
-      message: error instanceof Error ? error.message : '알 수 없는 오류',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
 
-    // 5초 후 작업 상태 초기화
     setTimeout(async () => {
       await saveComparisonTaskState(null);
     }, 5000);
@@ -353,7 +335,7 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
       message: '제품들을 비교 분석하고 있습니다...',
     });
 
-    // 2. Agent API 호출 (사용자 기준 전송 및 분석 완료)
+    // 2. Agent API 호출
     const response = await continueComparison(currentTask.threadId, {
       user_input: userCriteria,
     });
@@ -368,28 +350,20 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
         completedAt: Date.now(),
       });
 
-      // 3-2. analysisHistory에 저장
-      const allProducts = await getProducts();
-      const selectedProducts = allProducts.filter((p) =>
-        currentTask.selectedProductIds.includes(p.id)
-      );
-
+      // 3-2. analysisHistory에 저장 (정규화: productIds만 저장)
       const historyId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const historyItem = {
+      const historyItem: AnalysisHistoryItem = {
         id: historyId,
         date: Date.now(),
         category: currentTask.category,
         productCount: response.report.total_products,
-        products: selectedProducts,
+        productIds: currentTask.selectedProductIds, // 정규화
         criteria: response.report.user_criteria,
         reportData: response.report,
+        isFavorite: false,
       };
 
-      const result = await chrome.storage.local.get('analysisHistory');
-      const currentHistory = result.analysisHistory || [];
-      const updatedHistory = [historyItem, ...currentHistory];
-      await chrome.storage.local.set({ analysisHistory: updatedHistory });
-
+      await db.analysisHistory.add(historyItem);
       console.log('[Background] Analysis history saved:', historyId);
 
       // 4. 알림 표시
@@ -400,10 +374,8 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
         message: `${response.report.total_products}개 제품 비교가 완료되었습니다.`,
       });
 
-      // 5. 새 탭에서 비교 리포트 열기 (historyId 전달)
-      const reportUrl = chrome.runtime.getURL(
-        `src/compare-report/index.html?historyId=${historyId}`
-      );
+      // 5. 새 탭에서 비교 리포트 열기
+      const reportUrl = chrome.runtime.getURL(`src/compare-report/index.html?historyId=${historyId}`);
       await chrome.tabs.create({ url: reportUrl });
 
       // 6. 5초 후 작업 상태 초기화
@@ -414,12 +386,12 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
       throw new Error('예상하지 못한 응답 형식입니다.');
     }
   } catch (error) {
-    console.error('비교 분석 실패:', error);
+    console.error('Comparison analysis failed:', error);
 
     await updateComparisonTaskState({
       status: 'failed',
       message: '비교 분석 실패',
-      error: error instanceof Error ? error.message : '알 수 없는 오류',
+      error: error instanceof Error ? error.message : 'Unknown error',
       completedAt: Date.now(),
     });
 
@@ -427,7 +399,7 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
       type: 'basic',
       iconUrl: 'icon-128.png',
       title: '비교 분석 실패',
-      message: error instanceof Error ? error.message : '알 수 없는 오류',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
 
     setTimeout(async () => {
@@ -436,23 +408,26 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
   }
 }
 
+// ========== 중복 처리 ==========
+
 /**
  * 중복 제품 선택 처리
  */
-async function handleDuplicateChoice(
-  choice: 'update' | 'save_new' | 'cancel'
-): Promise<void> {
+async function handleDuplicateChoice(choice: 'update' | 'save_new' | 'cancel'): Promise<void> {
   try {
     const currentTask = await getTaskState();
-    if (!currentTask || currentTask.status !== ('waiting_duplicate_choice' as any)) {
+    if (!currentTask || (currentTask.status as string) !== 'waiting_duplicate_choice') {
       throw new Error('중복 선택 대기 중인 작업이 없습니다.');
     }
 
-    const content = (currentTask as any).extractedContent;
-    const duplicateProduct = (currentTask as any).duplicateProduct;
+    if (!duplicateCheckData) {
+      throw new Error('중복 데이터가 없습니다.');
+    }
+
+    const { duplicateProduct, extractedContent: content } = duplicateCheckData;
 
     if (choice === 'cancel') {
-      // 취소: 작업 취소
+      duplicateCheckData = null;
       await updateTaskState({
         status: 'failed',
         message: '사용자가 취소했습니다.',
@@ -480,22 +455,13 @@ async function handleDuplicateChoice(
         message: '기존 제품을 업데이트하고 있습니다...',
       });
 
-      const updatedProduct: StoredProduct = {
-        ...duplicateProduct,
+      await updateProduct(duplicateProduct.id, {
         title: content.title,
         price: analysisResult.product_analysis.price,
         summary: analysisResult.product_analysis.summary,
         thumbnailUrl: analysisResult.thumbnail || analysisResult.valid_images[0]?.src,
         fullAnalysis: analysisResult.product_analysis,
-        extractedAt: Date.now(), // 추출 날짜 갱신
-      };
-
-      // Storage에서 제품 업데이트
-      const products = await getProducts();
-      const updatedProducts = products.map((p) =>
-        p.id === duplicateProduct.id ? updatedProduct : p
-      );
-      await chrome.storage.local.set({ products: updatedProducts });
+      });
 
       await updateTaskState({
         status: 'completed',
@@ -510,7 +476,7 @@ async function handleDuplicateChoice(
         message: `"${analysisResult.product_analysis.product_name}" 제품이 업데이트되었습니다.`,
       });
     } else if (choice === 'save_new') {
-      // 새로 저장: 새 제품으로 추가
+      // 새로 저장
       await updateTaskState({
         status: 'saving',
         message: '새 제품으로 저장하고 있습니다...',
@@ -542,17 +508,19 @@ async function handleDuplicateChoice(
       });
     }
 
-    // 3초 후 작업 상태 초기화
+    duplicateCheckData = null;
+
     setTimeout(async () => {
       await saveTaskState(null);
     }, 3000);
   } catch (error) {
-    console.error('중복 선택 처리 실패:', error);
+    console.error('Duplicate choice handling failed:', error);
+    duplicateCheckData = null;
 
     await updateTaskState({
       status: 'failed',
       message: '처리 실패',
-      error: error instanceof Error ? error.message : '알 수 없는 오류',
+      error: error instanceof Error ? error.message : 'Unknown error',
       completedAt: Date.now(),
     });
 
@@ -562,14 +530,12 @@ async function handleDuplicateChoice(
   }
 }
 
-/**
- * 메시지 리스너
- */
+// ========== 메시지 리스너 ==========
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'START_ANALYSIS') {
     const { category, tabId } = message;
 
-    // 비동기 작업 시작
     executeAnalysisTask(category, tabId)
       .then(() => {
         sendResponse({ success: true });
@@ -577,16 +543,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => {
         sendResponse({
           success: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류',
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       });
 
-    // 비동기 응답을 위해 true 반환
     return true;
   }
 
   if (message.type === 'GET_TASK_STATE') {
-    // 현재 작업 상태 조회
     getTaskState()
       .then((task) => {
         sendResponse({ success: true, task });
@@ -595,6 +559,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       });
 
+    return true;
+  }
+
+  if (message.type === 'GET_DUPLICATE_DATA') {
+    sendResponse({
+      success: true,
+      data: duplicateCheckData,
+    });
     return true;
   }
 
@@ -608,7 +580,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => {
         sendResponse({
           success: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류',
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       });
 
@@ -627,7 +599,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => {
         sendResponse({
           success: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류',
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       });
 
@@ -644,7 +616,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => {
         sendResponse({
           success: false,
-          error: error instanceof Error ? error.message : '알 수 없는 오류',
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       });
 
@@ -666,11 +638,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-/**
- * Extension 설치 시
- */
-chrome.runtime.onInstalled.addListener(() => {
+// ========== Extension 설치/시작 시 ==========
+
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('OptiPick Extension installed');
+
+  // 마이그레이션 실행
+  try {
+    await migrateFromChromeStorage();
+  } catch (error) {
+    console.error('Migration failed on install:', error);
+  }
+
   // 초기 작업 상태 초기화
-  saveTaskState(null);
+  await saveTaskState(null);
+  await saveComparisonTaskState(null);
+});
+
+// Service Worker 시작 시 마이그레이션 확인
+migrateFromChromeStorage().catch((error) => {
+  console.error('Migration failed on startup:', error);
 });

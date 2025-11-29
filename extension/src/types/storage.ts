@@ -26,6 +26,8 @@ export interface StoredProduct {
   notes?: string;
   /** 사용자 태그 */
   tags?: string[];
+  /** LLM input으로 사용한 원본 HTML body (향후 챗봇 기능용) */
+  rawContent?: string;
 }
 
 /**
@@ -142,4 +144,44 @@ export interface ComparisonTemplate {
   createdAt: number;
   /** 수정 시각 */
   updatedAt: number;
+}
+
+// ========== 분석 히스토리 관련 타입 ==========
+
+/**
+ * 분석 결과 히스토리 (정규화: productIds만 저장)
+ */
+export interface AnalysisHistoryItem {
+  /** 히스토리 ID */
+  id: string;
+  /** 분석 일시 */
+  date: number;
+  /** 카테고리 */
+  category: string;
+  /** 비교 대상 제품 수 */
+  productCount: number;
+  /** 제품 ID 목록 (정규화) */
+  productIds: string[];
+  /** 비교 기준 */
+  criteria?: string[];
+  /** 사용자 우선순위 */
+  userPriorities?: string[];
+  /** 비교 리포트 데이터 */
+  reportData?: import('./content').ComparisonReportData;
+  /** 즐겨찾기 여부 */
+  isFavorite?: boolean;
+}
+
+// ========== 카테고리 히스토리 관련 타입 ==========
+
+/**
+ * 카테고리 사용 히스토리
+ */
+export interface CategoryHistory {
+  /** 카테고리 이름 */
+  category: string;
+  /** 사용 횟수 */
+  count: number;
+  /** 마지막 사용 시각 */
+  lastUsed: number;
 }

@@ -22,7 +22,7 @@ export function ExtractPage() {
   useEffect(() => {
     const pollTaskState = async () => {
       try {
-        const response = await sendMessage({ type: "GET_TASK_STATE" });
+        const response = await sendMessage<{ success: boolean; task?: { status: string; message?: string; error?: string } }>({ type: "GET_TASK_STATE" });
         if (response.success && response.task) {
           const task = response.task;
 
@@ -141,7 +141,7 @@ export function ExtractPage() {
       }
       const pollTaskState = async () => {
         try {
-          const response = await sendMessage({ type: "GET_TASK_STATE" });
+          const response = await sendMessage<{ success: boolean; task?: { status: string; message?: string; error?: string } }>({ type: "GET_TASK_STATE" });
           if (response.success && response.task) {
             const task = response.task;
             if (task.status === "completed") {
