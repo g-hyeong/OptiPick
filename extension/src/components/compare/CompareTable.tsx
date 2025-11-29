@@ -27,7 +27,6 @@ interface CompareTableProps {
   onCriteriaReorder: (newOrder: string[]) => void;
   onProductHide: (name: string) => void;
   isUserCriterion: (c: string) => boolean;
-  getCriteriaImportance: (c: string) => number | undefined;
 }
 
 export function CompareTable({
@@ -39,7 +38,6 @@ export function CompareTable({
   onCriteriaReorder,
   onProductHide,
   isUserCriterion,
-  getCriteriaImportance,
 }: CompareTableProps) {
   // 드래그 센서 설정
   const sensors = useSensors(
@@ -127,7 +125,6 @@ export function CompareTable({
                   id={criterion}
                   criterion={criterion}
                   isUserCriterion={isUserCriterion(criterion)}
-                  importance={getCriteriaImportance(criterion)}
                   productOrder={productOrder}
                   getProductData={getProductData}
                   isEven={idx % 2 === 0}

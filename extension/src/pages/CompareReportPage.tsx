@@ -18,7 +18,6 @@ export function CompareReportPage() {
       getProductData,
       getProductInfo,
       isUserCriterion,
-      getCriteriaImportance,
     },
     orderedVisibleProducts,
     orderedVisibleCriteria,
@@ -108,7 +107,6 @@ export function CompareReportPage() {
           onCriteriaToggle={toggleCriterion}
           onProductRestore={showProduct}
           isUserCriterion={isUserCriterion}
-          getCriteriaImportance={getCriteriaImportance}
         />
 
         {/* 메인 테이블 */}
@@ -123,7 +121,6 @@ export function CompareReportPage() {
               onCriteriaReorder={reorderCriteria}
               onProductHide={hideProduct}
               isUserCriterion={isUserCriterion}
-              getCriteriaImportance={getCriteriaImportance}
             />
           </Card>
         </div>

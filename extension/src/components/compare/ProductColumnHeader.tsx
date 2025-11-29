@@ -90,47 +90,51 @@ export function ProductColumnHeader({
         <GripIcon className="w-4 h-4 text-primary-400" />
       </div>
 
-      {/* 숨기기 버튼 - hover 시 표시 */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onHide();
-        }}
-        className={cn(
-          "absolute top-2 right-2 p-1 rounded-full",
-          "opacity-0 group-hover:opacity-100",
-          "bg-warm-100 hover:bg-warm-200 text-primary-500 hover:text-primary-700",
-          "transition-all duration-150"
-        )}
-        title="숨기기"
-      >
-        <CloseIcon className="w-3.5 h-3.5" />
-      </button>
-
       {/* 썸네일 */}
       <div className="flex flex-col items-center gap-2 mt-4">
-        {thumbnailUrl ? (
-          <a
-            href={productUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block"
+        {/* 썸네일 + 오버레이 X 버튼 */}
+        <div className="relative">
+          {thumbnailUrl ? (
+            <a
+              href={productUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <img
+                src={thumbnailUrl}
+                alt={productName}
+                className={cn(
+                  "w-16 h-16 object-cover rounded-lg",
+                  "ring-2 ring-transparent group-hover:ring-primary-200",
+                  "transition-all duration-200"
+                )}
+              />
+            </a>
+          ) : (
+            <div className="w-16 h-16 bg-warm-100 rounded-lg flex items-center justify-center">
+              <span className="text-warm-400 text-2xl">?</span>
+            </div>
+          )}
+
+          {/* 숨기기 버튼 - hover 시 썸네일 우상단에 오버레이 */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onHide();
+            }}
+            className={cn(
+              "absolute -top-1.5 -right-1.5 p-0.5 rounded-full",
+              "opacity-0 group-hover:opacity-100",
+              "bg-primary-500 hover:bg-primary-600 text-white",
+              "shadow-sm transition-all duration-150",
+              "transform hover:scale-110"
+            )}
+            title="숨기기"
           >
-            <img
-              src={thumbnailUrl}
-              alt={productName}
-              className={cn(
-                "w-16 h-16 object-cover rounded-lg",
-                "ring-2 ring-transparent hover:ring-primary-400",
-                "transition-all duration-200"
-              )}
-            />
-          </a>
-        ) : (
-          <div className="w-16 h-16 bg-warm-100 rounded-lg flex items-center justify-center">
-            <span className="text-warm-400 text-2xl">?</span>
-          </div>
-        )}
+            <CloseIcon className="w-3 h-3" />
+          </button>
+        </div>
 
         {/* 제품명 (truncate) */}
         <a

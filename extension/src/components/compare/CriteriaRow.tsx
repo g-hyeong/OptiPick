@@ -7,7 +7,6 @@ interface CriteriaRowProps {
   id: string;
   criterion: string;
   isUserCriterion: boolean;
-  importance?: number;
   productOrder: string[];
   getProductData: (name: string) => ProductComparison | undefined;
   isEven: boolean;
@@ -37,7 +36,6 @@ export function CriteriaRow({
   id,
   criterion,
   isUserCriterion,
-  importance,
   productOrder,
   getProductData,
   isEven,
@@ -91,18 +89,11 @@ export function CriteriaRow({
           {/* 기준명 + 뱃지 */}
           <div className="flex flex-col gap-1">
             <span className="text-sm">{criterion}</span>
-            <div className="flex gap-1.5 flex-wrap">
-              {isUserCriterion && (
-                <span className="text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded font-medium">
-                  사용자
-                </span>
-              )}
-              {importance && (
-                <span className="text-[10px] bg-accent-100 text-accent-700 px-1.5 py-0.5 rounded font-medium">
-                  {importance}
-                </span>
-              )}
-            </div>
+            {isUserCriterion && (
+              <span className="text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded font-medium w-fit">
+                사용자
+              </span>
+            )}
           </div>
         </div>
       </td>

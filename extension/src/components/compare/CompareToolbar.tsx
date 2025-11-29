@@ -8,7 +8,6 @@ interface CompareToolbarProps {
   onCriteriaToggle: (criterion: string) => void;
   onProductRestore: (product: string) => void;
   isUserCriterion: (c: string) => boolean;
-  getCriteriaImportance: (c: string) => number | undefined;
 }
 
 // 체크 아이콘
@@ -56,7 +55,6 @@ export function CompareToolbar({
   onCriteriaToggle,
   onProductRestore,
   isUserCriterion,
-  getCriteriaImportance,
 }: CompareToolbarProps) {
   const [showAllCriteria, setShowAllCriteria] = useState(false);
   const [showHiddenDropdown, setShowHiddenDropdown] = useState(false);
@@ -79,7 +77,6 @@ export function CompareToolbar({
           {visibleChips.map((criterion) => {
             const isVisible = visibleCriteria.includes(criterion);
             const isUser = isUserCriterion(criterion);
-            const importance = getCriteriaImportance(criterion);
 
             return (
               <button
@@ -95,16 +92,14 @@ export function CompareToolbar({
               >
                 {isVisible && <CheckIcon className="w-3 h-3" />}
                 <span className="truncate max-w-[80px]">{criterion}</span>
-                {(isUser || importance) && (
+                {isUser && (
                   <span
                     className={cn(
                       "text-[10px] px-1 rounded",
-                      isVisible
-                        ? "bg-white/20"
-                        : "bg-primary-100"
+                      isVisible ? "bg-white/20" : "bg-primary-100"
                     )}
                   >
-                    {isUser ? "U" : importance}
+                    U
                   </span>
                 )}
               </button>
