@@ -1,29 +1,131 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
+import { HistoryItem } from "./HistoryItem";
+import type { AnalysisHistoryItem } from "@/types/storage";
 
 interface CategoryItemProps {
   category: string;
   count: number;
   isSelected: boolean;
+  isExpanded: boolean;
+  historyItems: AnalysisHistoryItem[];
   onSelect: () => void;
+  onToggleExpand: () => void;
   onRename: (oldName: string, newName: string) => Promise<void>;
   onDelete: (category: string) => Promise<void>;
   onCompare: (category: string) => void;
+  onHistoryClick: (historyId: string) => void;
+  onToggleFavorite: (historyId: string) => void;
 }
+
+// 아이콘 컴포넌트들
+const ChevronIcon = ({ isExpanded }: { isExpanded: boolean }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn(
+      "transition-transform duration-200",
+      isExpanded ? "rotate-180" : ""
+    )}
+  >
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
+
+const CompareIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+);
+
+const MoreIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="19" r="1" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
+
+const TrashIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
 
 export function CategoryItem({
   category,
   count,
   isSelected,
+  isExpanded,
+  historyItems,
   onSelect,
+  onToggleExpand,
   onRename,
   onDelete,
   onCompare,
+  onHistoryClick,
+  onToggleFavorite,
 }: CategoryItemProps) {
   const [isEditing, setIsEditing] = React.useState(false);
   const [editValue, setEditValue] = React.useState(category);
-  const [isHovered, setIsHovered] = React.useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -36,8 +138,7 @@ export function CategoryItem({
     }
   }, [isEditing]);
 
-  const handleEditClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleEditClick = () => {
     setIsEditing(true);
     setEditValue(category);
     setError(null);
@@ -46,7 +147,6 @@ export function CategoryItem({
   const handleSave = async () => {
     const trimmedValue = editValue.trim();
 
-    // Validation
     if (!trimmedValue) {
       setError("카테고리명을 입력해주세요");
       return;
@@ -81,8 +181,7 @@ export function CategoryItem({
     }
   };
 
-  const handleDeleteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteClick = () => {
     setShowDeleteDialog(true);
   };
 
@@ -99,15 +198,37 @@ export function CategoryItem({
     onCompare(category);
   };
 
+  const handleExpandClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleExpand();
+  };
+
+  const handleHeaderClick = () => {
+    onSelect();
+  };
+
+  // 드롭다운 메뉴 아이템
+  const dropdownItems = [
+    {
+      label: "이름 변경",
+      icon: <EditIcon />,
+      onClick: handleEditClick,
+    },
+    {
+      label: "삭제",
+      icon: <TrashIcon />,
+      onClick: handleDeleteClick,
+      variant: "danger" as const,
+    },
+  ];
+
   return (
     <>
       <div
         className={cn(
-          "w-full group relative rounded-md transition-colors",
-          isSelected ? "bg-primary-500 text-white" : "hover:bg-warm-100"
+          "w-full rounded-md transition-colors",
+          isSelected ? "bg-primary-100" : ""
         )}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
       >
         {isEditing ? (
           // 편집 모드
@@ -126,107 +247,106 @@ export function CategoryItem({
                 error ? "border-red-500" : "border-warm-300"
               )}
             />
-            {error && (
-              <p className="text-xs text-red-600 mt-1">{error}</p>
-            )}
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
           </div>
         ) : (
-          // 일반 모드
-          <button
-            onClick={onSelect}
-            className="w-full text-left px-3 py-2 flex items-center gap-2"
-          >
-            {/* 카테고리명 */}
-            <span className="truncate min-w-0 flex-1 text-sm">
-              {category}
-            </span>
-
-            {/* 제품 개수 뱃지 */}
-            <span
+          <>
+            {/* 카테고리 헤더 */}
+            <div
               className={cn(
-                "text-xs px-2 py-0.5 rounded-full flex-shrink-0",
-                isSelected
-                  ? "bg-white/20 text-white"
-                  : "bg-primary-100 text-primary-600"
+                "flex items-center gap-1 px-2 py-2 rounded-md cursor-pointer",
+                "hover:bg-warm-100 transition-colors"
               )}
             >
-              {count}
-            </span>
+              {/* 카테고리명 (클릭 시 제품 목록으로) */}
+              <button
+                onClick={handleHeaderClick}
+                className="flex-1 min-w-0 flex items-center gap-2 text-left"
+              >
+                <span className="truncate text-sm font-medium text-primary-800">
+                  {category}
+                </span>
+                <span
+                  className={cn(
+                    "text-xs px-1.5 py-0.5 rounded-full flex-shrink-0",
+                    "bg-primary-100 text-primary-600"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
 
-            {/* 아이콘 버튼들 (hover 시 표시) */}
-            {isHovered && !isSelected && (
-              <div className="flex items-center gap-1 ml-1">
-                {/* 비교 버튼 */}
+              {/* 액션 버튼들 */}
+              <div className="flex items-center gap-0.5 flex-shrink-0">
+                {/* 비교 버튼 (항상 표시) */}
                 <button
                   onClick={handleCompareClick}
-                  className="p-1 rounded hover:bg-green-100 transition-colors"
-                  title="비교 실행"
+                  disabled={count < 2}
+                  className={cn(
+                    "p-1 rounded transition-colors",
+                    count >= 2
+                      ? "text-green-600 hover:bg-green-100"
+                      : "text-primary-300 cursor-not-allowed"
+                  )}
+                  title={count >= 2 ? "비교 분석" : "2개 이상의 제품이 필요합니다"}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-green-600"
-                  >
-                    <polyline points="16 18 22 12 16 6"></polyline>
-                    <polyline points="8 6 2 12 8 18"></polyline>
-                  </svg>
+                  <CompareIcon />
                 </button>
 
-                {/* 편집 버튼 */}
-                <button
-                  onClick={handleEditClick}
-                  className="p-1 rounded hover:bg-blue-100 transition-colors"
-                  title="편집"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-blue-600"
-                  >
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                </button>
+                {/* 더보기 메뉴 */}
+                <DropdownMenu
+                  trigger={
+                    <button
+                      className="p-1 rounded text-primary-500 hover:bg-warm-200 transition-colors"
+                      title="더보기"
+                    >
+                      <MoreIcon />
+                    </button>
+                  }
+                  items={dropdownItems}
+                />
 
-                {/* 삭제 버튼 */}
+                {/* 확장/축소 버튼 */}
                 <button
-                  onClick={handleDeleteClick}
-                  className="p-1 rounded hover:bg-red-100 transition-colors"
-                  title="삭제"
+                  onClick={handleExpandClick}
+                  className="p-1 rounded text-primary-500 hover:bg-warm-200 transition-colors"
+                  title={isExpanded ? "접기" : "분석 결과 보기"}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="text-red-600"
-                  >
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
+                  <ChevronIcon isExpanded={isExpanded} />
                 </button>
               </div>
+            </div>
+
+            {/* 확장 영역: 분석 결과 목록 */}
+            {isExpanded && (
+              <div className="pl-3 pr-1 pb-2 space-y-0.5">
+                {historyItems.length === 0 ? (
+                  <p className="text-xs text-primary-400 py-2 pl-2">
+                    분석 결과가 없습니다
+                  </p>
+                ) : (
+                  <>
+                    {historyItems.slice(0, 3).map((item) => (
+                      <HistoryItem
+                        key={item.id}
+                        item={item}
+                        onClick={() => onHistoryClick(item.id)}
+                        onToggleFavorite={() => onToggleFavorite(item.id)}
+                      />
+                    ))}
+                    {historyItems.length > 3 && (
+                      <button
+                        onClick={onSelect}
+                        className="w-full text-left text-xs text-primary-500 hover:text-primary-700 py-1 pl-2"
+                      >
+                        +{historyItems.length - 3}개 더 보기
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             )}
-          </button>
+          </>
         )}
       </div>
 

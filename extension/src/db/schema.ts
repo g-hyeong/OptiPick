@@ -56,6 +56,20 @@ class OptiPickDB extends Dexie {
       // id: PK, threadId/timestamp: 인덱스
       chatMessages: 'id, threadId, timestamp',
     });
+
+    // v3: orderBy()에서 사용하는 필드 인덱스 추가
+    this.version(3).stores({
+      products: 'id, category, addedAt, url',
+      analysisHistory: 'id, category, date, isFavorite',
+      // count 인덱스 추가 (orderBy 용)
+      categoryHistory: 'category, count',
+      // updatedAt 인덱스 추가 (orderBy 용)
+      comparisonTemplates: 'id, category, updatedAt',
+      currentTask: 'taskId',
+      currentComparisonTask: 'taskId',
+      chatSessions: 'threadId, historyId, updatedAt',
+      chatMessages: 'id, threadId, timestamp',
+    });
   }
 }
 

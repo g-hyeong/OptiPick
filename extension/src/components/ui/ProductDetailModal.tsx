@@ -1,499 +1,279 @@
-import React, { useState, useEffect } from 'react';
-import { StoredProduct } from '@/types/storage';
+import React from "react";
+import { StoredProduct } from "@/types/storage";
 import {
   Modal,
   ModalContent,
   ModalHeader,
   ModalFooter,
   ModalTitle,
-} from './Modal';
-import { Button } from './Button';
-import { TagSelector } from './TagSelector';
-import { getTagColor } from '@/lib/tagUtils';
+} from "./Modal";
+import { Button } from "./Button";
+import { cn, formatRelativeTime } from "@/lib/utils";
 
 interface ProductDetailModalProps {
   product: StoredProduct | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (updatedProduct: Partial<StoredProduct>) => Promise<void>;
+  onToggleFavorite: (productId: string) => void;
 }
+
+// 별 아이콘 (채워진)
+const StarFilledIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+);
+
+// 별 아이콘 (빈)
+const StarOutlineIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+  </svg>
+);
+
+// 외부 링크 아이콘
+const ExternalLinkIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
 
 const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
   isOpen,
   onClose,
-  onSave,
+  onToggleFavorite,
 }) => {
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editedProduct, setEditedProduct] = useState<Partial<StoredProduct>>({});
-  const [isSaving, setIsSaving] = useState(false);
-
-  // product가 변경되면 editedProduct 초기화
-  useEffect(() => {
-    if (product) {
-      setEditedProduct({
-        title: product.title,
-        price: product.price,
-        summary: product.summary,
-        fullAnalysis: product.fullAnalysis,
-        notes: product.notes,
-        tags: product.tags || [],
-      });
-    }
-    setIsEditMode(false);
-  }, [product]);
-
   if (!product) return null;
-
-  const handleEdit = () => {
-    setIsEditMode(true);
-  };
-
-  const handleCancel = () => {
-    // 원본 데이터로 복원
-    setEditedProduct({
-      title: product.title,
-      price: product.price,
-      summary: product.summary,
-      fullAnalysis: product.fullAnalysis,
-      notes: product.notes,
-      tags: product.tags || [],
-    });
-    setIsEditMode(false);
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSave(editedProduct);
-      setIsEditMode(false);
-    } catch (error) {
-      console.error('Failed to save product:', error);
-      alert('제품 정보 저장에 실패했습니다.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleOpenOriginalPage = () => {
     chrome.tabs.create({ url: product.url });
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const handleFavoriteClick = () => {
+    onToggleFavorite(product.id);
   };
 
   return (
     <Modal open={isOpen} onOpenChange={onClose}>
-      <ModalContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <ModalHeader>
-          <div className="flex items-center justify-between pr-8">
-            <ModalTitle>
-              {isEditMode ? '상품 정보 편집' : '상품 상세 정보'}
-            </ModalTitle>
-            {!isEditMode && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleEdit}
-                className="ml-4"
-              >
-                편집
-              </Button>
-            )}
+      <ModalContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <ModalHeader className="flex-shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <ModalTitle className="line-clamp-2 text-lg">
+                {product.title || product.fullAnalysis.product_name}
+              </ModalTitle>
+              <div className="flex items-center gap-3 mt-2 text-sm text-primary-500">
+                <span>{product.category}</span>
+                <span>|</span>
+                <span>{formatRelativeTime(product.addedAt)}</span>
+              </div>
+            </div>
+            {/* 즐겨찾기 버튼 */}
+            <button
+              onClick={handleFavoriteClick}
+              className={cn(
+                "p-2 rounded-full transition-colors flex-shrink-0",
+                product.isFavorite
+                  ? "text-yellow-500 bg-yellow-50 hover:bg-yellow-100"
+                  : "text-primary-400 hover:text-yellow-500 hover:bg-yellow-50"
+              )}
+              title={product.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+            >
+              {product.isFavorite ? <StarFilledIcon /> : <StarOutlineIcon />}
+            </button>
           </div>
         </ModalHeader>
 
-        <div className="space-y-6 py-4">
-          {/* 썸네일 이미지 */}
-          {product.thumbnailUrl && (
-            <div className="flex justify-center">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* 상단: 썸네일 + 기본 정보 */}
+          <div className="flex gap-6 mb-6">
+            {/* 썸네일 */}
+            {product.thumbnailUrl ? (
               <img
                 src={product.thumbnailUrl}
                 alt={product.title}
-                className="max-w-sm max-h-48 object-contain rounded-lg"
+                className="w-32 h-32 object-cover rounded-lg flex-shrink-0 bg-warm-100"
               />
-            </div>
-          )}
+            ) : (
+              <div className="w-32 h-32 bg-warm-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span className="text-4xl text-warm-300">📷</span>
+              </div>
+            )}
 
-          {/* 제품 기본 정보 */}
-          <div className="space-y-4">
-            {/* 제품명 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-1">
-                제품명
-              </label>
-              {isEditMode ? (
-                <input
-                  type="text"
-                  value={editedProduct.title || ''}
-                  onChange={(e) =>
-                    setEditedProduct({ ...editedProduct, title: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-warm-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400"
-                />
-              ) : (
-                <p className="text-base text-primary-900">{product.title}</p>
-              )}
-            </div>
-
-            {/* 가격 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-1">
-                가격
-              </label>
-              {isEditMode ? (
-                <input
-                  type="text"
-                  value={editedProduct.price || ''}
-                  onChange={(e) =>
-                    setEditedProduct({ ...editedProduct, price: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-warm-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400"
-                />
-              ) : (
-                <p className="text-lg font-semibold text-primary-900">
+            {/* 가격 + 요약 */}
+            <div className="flex-1 min-w-0">
+              {product.price && (
+                <p className="text-2xl font-bold text-primary-800 mb-3">
                   {product.price}
                 </p>
               )}
-            </div>
-
-            {/* 카테고리 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-1">
-                카테고리
-              </label>
-              <p className="text-base text-primary-900">{product.category}</p>
-            </div>
-
-            {/* 추출일 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-1">
-                추출일
-              </label>
-              <p className="text-base text-primary-900">
-                {formatDate(product.addedAt)}
-              </p>
-            </div>
-
-            {/* 요약 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-1">
-                요약
-              </label>
-              {isEditMode ? (
-                <textarea
-                  value={editedProduct.summary || ''}
-                  onChange={(e) =>
-                    setEditedProduct({ ...editedProduct, summary: e.target.value })
-                  }
-                  rows={3}
-                  className="w-full px-3 py-2 border border-warm-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400"
-                />
-              ) : (
-                <p className="text-base text-primary-900 whitespace-pre-wrap">
+              {product.summary && (
+                <p className="text-sm text-primary-600 leading-relaxed">
                   {product.summary}
                 </p>
               )}
             </div>
+          </div>
 
-            {/* 전체 분석 결과 */}
-            <div>
-              <label className="block text-sm font-medium text-primary-700 mb-2">
-                전체 분석 결과
-              </label>
-              {isEditMode ? (
-                <div className="space-y-3">
-                  {/* key_features */}
-                  <div>
-                    <label className="block text-xs font-medium text-primary-600 mb-1">
-                      주요 특징
-                    </label>
-                    <textarea
-                      value={
-                        editedProduct.fullAnalysis?.key_features?.join('\n') ||
-                        product.fullAnalysis.key_features.join('\n')
-                      }
-                      onChange={(e) =>
-                        setEditedProduct({
-                          ...editedProduct,
-                          fullAnalysis: {
-                            ...product.fullAnalysis,
-                            key_features: e.target.value.split('\n'),
-                          },
-                        })
-                      }
-                      rows={4}
-                      placeholder="한 줄에 하나씩 입력"
-                      className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    />
-                  </div>
+          {/* 분석 결과 섹션 */}
+          <div className="space-y-4">
+            {/* 주요 특징 */}
+            <Section title="주요 특징" variant="default">
+              <ul className="space-y-1.5">
+                {product.fullAnalysis.key_features.map((feature, idx) => (
+                  <li key={idx} className="flex gap-2 text-sm text-primary-700">
+                    <span className="text-primary-400 flex-shrink-0">•</span>
+                    <span>{feature}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
 
-                  {/* pros */}
-                  <div>
-                    <label className="block text-xs font-medium text-primary-600 mb-1">
-                      장점
-                    </label>
-                    <textarea
-                      value={
-                        editedProduct.fullAnalysis?.pros?.join('\n') ||
-                        product.fullAnalysis.pros.join('\n')
-                      }
-                      onChange={(e) =>
-                        setEditedProduct({
-                          ...editedProduct,
-                          fullAnalysis: {
-                            ...product.fullAnalysis,
-                            pros: e.target.value.split('\n'),
-                          },
-                        })
-                      }
-                      rows={3}
-                      placeholder="한 줄에 하나씩 입력"
-                      className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    />
-                  </div>
+            {/* 장점 / 단점 */}
+            <div className="grid grid-cols-2 gap-4">
+              <Section title="장점" variant="positive">
+                <ul className="space-y-1.5">
+                  {product.fullAnalysis.pros.map((pro, idx) => (
+                    <li key={idx} className="flex gap-2 text-sm text-green-700">
+                      <span className="text-green-500 flex-shrink-0">+</span>
+                      <span>{pro}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
 
-                  {/* cons */}
-                  <div>
-                    <label className="block text-xs font-medium text-primary-600 mb-1">
-                      단점
-                    </label>
-                    <textarea
-                      value={
-                        editedProduct.fullAnalysis?.cons?.join('\n') ||
-                        product.fullAnalysis.cons.join('\n')
-                      }
-                      onChange={(e) =>
-                        setEditedProduct({
-                          ...editedProduct,
-                          fullAnalysis: {
-                            ...product.fullAnalysis,
-                            cons: e.target.value.split('\n'),
-                          },
-                        })
-                      }
-                      rows={3}
-                      placeholder="한 줄에 하나씩 입력"
-                      className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    />
-                  </div>
-
-                  {/* recommended_for */}
-                  <div>
-                    <label className="block text-xs font-medium text-primary-600 mb-1">
-                      추천 대상
-                    </label>
-                    <input
-                      type="text"
-                      value={
-                        editedProduct.fullAnalysis?.recommended_for ||
-                        product.fullAnalysis.recommended_for
-                      }
-                      onChange={(e) =>
-                        setEditedProduct({
-                          ...editedProduct,
-                          fullAnalysis: {
-                            ...product.fullAnalysis,
-                            recommended_for: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-warm-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-warm-50 rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto">
-                  {/* 주요 특징 */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-primary-800 mb-2">
-                      주요 특징
-                    </h4>
-                    <ul className="list-disc list-inside space-y-1">
-                      {product.fullAnalysis.key_features.map((feature, idx) => (
-                        <li key={idx} className="text-sm text-primary-700">
-                          {feature}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* 장점 */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-green-800 mb-2">
-                      장점
-                    </h4>
-                    <ul className="list-disc list-inside space-y-1">
-                      {product.fullAnalysis.pros.map((pro, idx) => (
-                        <li key={idx} className="text-sm text-green-700">
-                          {pro}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* 단점 */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-red-800 mb-2">
-                      단점
-                    </h4>
-                    <ul className="list-disc list-inside space-y-1">
-                      {product.fullAnalysis.cons.map((con, idx) => (
-                        <li key={idx} className="text-sm text-red-700">
-                          {con}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* 추천 대상 */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-primary-800 mb-2">
-                      추천 대상
-                    </h4>
-                    <p className="text-sm text-primary-700">
-                      {product.fullAnalysis.recommended_for}
-                    </p>
-                  </div>
-
-                  {/* 추천 이유 */}
-                  {product.fullAnalysis.recommendation_reasons &&
-                    product.fullAnalysis.recommendation_reasons.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-primary-800 mb-2">
-                          추천 이유
-                        </h4>
-                        <ul className="list-disc list-inside space-y-1">
-                          {product.fullAnalysis.recommendation_reasons.map(
-                            (reason, idx) => (
-                              <li key={idx} className="text-sm text-primary-700">
-                                {reason}
-                              </li>
-                            )
-                          )}
-                        </ul>
-                      </div>
-                    )}
-
-                  {/* 비추천 이유 */}
-                  {product.fullAnalysis.not_recommended_reasons &&
-                    product.fullAnalysis.not_recommended_reasons.length > 0 && (
-                      <div>
-                        <h4 className="text-sm font-semibold text-primary-800 mb-2">
-                          비추천 이유
-                        </h4>
-                        <ul className="list-disc list-inside space-y-1">
-                          {product.fullAnalysis.not_recommended_reasons.map(
-                            (reason, idx) => (
-                              <li key={idx} className="text-sm text-primary-700">
-                                {reason}
-                              </li>
-                            )
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                </div>
-              )}
+              <Section title="단점" variant="negative">
+                <ul className="space-y-1.5">
+                  {product.fullAnalysis.cons.map((con, idx) => (
+                    <li key={idx} className="flex gap-2 text-sm text-red-700">
+                      <span className="text-red-500 flex-shrink-0">-</span>
+                      <span>{con}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
             </div>
 
-            {/* 메모 섹션 */}
-            <div className="border-t border-warm-200 pt-4">
-              <label className="block text-sm font-medium text-primary-700 mb-2">
-                메모
-              </label>
-              {isEditMode ? (
-                <textarea
-                  value={editedProduct.notes || ''}
-                  onChange={(e) =>
-                    setEditedProduct({ ...editedProduct, notes: e.target.value })
-                  }
-                  rows={4}
-                  placeholder="이 제품에 대한 개인 메모를 작성하세요..."
-                  className="w-full px-3 py-2 border border-warm-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-400"
-                />
-              ) : (
-                <div className="bg-warm-50 rounded-lg p-3 min-h-[80px]">
-                  {product.notes ? (
-                    <p className="text-sm text-primary-700 whitespace-pre-wrap">
-                      {product.notes}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-primary-500 italic">
-                      메모가 없습니다
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
+            {/* 추천 대상 */}
+            <Section title="추천 대상" variant="default">
+              <p className="text-sm text-primary-700">
+                {product.fullAnalysis.recommended_for}
+              </p>
+            </Section>
 
-            {/* 태그 섹션 */}
-            <div className="border-t border-warm-200 pt-4">
-              <label className="block text-sm font-medium text-primary-700 mb-2">
-                태그
-              </label>
-              {isEditMode ? (
-                <TagSelector
-                  selectedTags={editedProduct.tags || []}
-                  onTagsChange={(tags) =>
-                    setEditedProduct({ ...editedProduct, tags })
-                  }
-                />
-              ) : (
-                <div className="bg-warm-50 rounded-lg p-3 min-h-[60px]">
-                  {product.tags && product.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {product.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`inline-flex items-center px-3 py-1 rounded-md text-sm border ${getTagColor(tag)}`}
+            {/* 추천 이유 */}
+            {product.fullAnalysis.recommendation_reasons &&
+              product.fullAnalysis.recommendation_reasons.length > 0 && (
+                <Section title="추천 이유" variant="positive">
+                  <ul className="space-y-1.5">
+                    {product.fullAnalysis.recommendation_reasons.map(
+                      (reason, idx) => (
+                        <li
+                          key={idx}
+                          className="flex gap-2 text-sm text-green-700"
                         >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-primary-500 italic">
-                      태그가 없습니다
-                    </p>
-                  )}
-                </div>
+                          <span className="text-green-500 flex-shrink-0">
+                            +
+                          </span>
+                          <span>{reason}</span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </Section>
               )}
-            </div>
+
+            {/* 비추천 이유 */}
+            {product.fullAnalysis.not_recommended_reasons &&
+              product.fullAnalysis.not_recommended_reasons.length > 0 && (
+                <Section title="비추천 이유" variant="negative">
+                  <ul className="space-y-1.5">
+                    {product.fullAnalysis.not_recommended_reasons.map(
+                      (reason, idx) => (
+                        <li
+                          key={idx}
+                          className="flex gap-2 text-sm text-red-700"
+                        >
+                          <span className="text-red-500 flex-shrink-0">-</span>
+                          <span>{reason}</span>
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </Section>
+              )}
           </div>
         </div>
 
-        <ModalFooter>
-          {isEditMode ? (
-            <>
-              <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
-                취소
-              </Button>
-              <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? '저장 중...' : '저장'}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={handleOpenOriginalPage}>
-                원본 페이지 열기
-              </Button>
-              <Button variant="outline" onClick={onClose}>
-                닫기
-              </Button>
-            </>
-          )}
+        <ModalFooter className="flex-shrink-0 border-t border-warm-200">
+          <Button
+            variant="outline"
+            onClick={handleOpenOriginalPage}
+            className="flex items-center gap-2"
+          >
+            <ExternalLinkIcon />
+            원본 페이지
+          </Button>
+          <Button onClick={onClose}>닫기</Button>
         </ModalFooter>
       </ModalContent>
     </Modal>
   );
 };
+
+// 섹션 컴포넌트
+interface SectionProps {
+  title: string;
+  variant: "default" | "positive" | "negative";
+  children: React.ReactNode;
+}
+
+function Section({ title, variant, children }: SectionProps) {
+  const bgColor = {
+    default: "bg-warm-50",
+    positive: "bg-green-50",
+    negative: "bg-red-50",
+  }[variant];
+
+  const titleColor = {
+    default: "text-primary-800",
+    positive: "text-green-800",
+    negative: "text-red-800",
+  }[variant];
+
+  return (
+    <div className={cn("rounded-lg p-4", bgColor)}>
+      <h4 className={cn("text-sm font-semibold mb-2", titleColor)}>{title}</h4>
+      {children}
+    </div>
+  );
+}
 
 export default ProductDetailModal;

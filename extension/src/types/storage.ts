@@ -22,10 +22,8 @@ export interface StoredProduct {
   fullAnalysis: ProductAnalysis;
   /** 저장 시각 (Unix timestamp) */
   addedAt: number;
-  /** 사용자 메모 */
-  notes?: string;
-  /** 사용자 태그 */
-  tags?: string[];
+  /** 즐겨찾기 여부 */
+  isFavorite?: boolean;
   /** LLM input으로 사용한 원본 HTML body (향후 챗봇 기능용) */
   rawContent?: string;
 }

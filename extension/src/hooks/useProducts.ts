@@ -62,6 +62,16 @@ export function useProducts() {
     await db.products.bulkDelete(productIds);
   }, []);
 
+  // 즐겨찾기 토글
+  const toggleFavorite = useCallback(async (productId: string) => {
+    const product = await db.products.get(productId);
+    if (product) {
+      await db.products.update(productId, {
+        isFavorite: !product.isFavorite,
+      });
+    }
+  }, []);
+
   // 수동 리로드 (보통 필요 없음, useLiveQuery가 자동 갱신)
   const reload = useCallback(() => {
     // useLiveQuery는 자동으로 데이터를 동기화하므로
@@ -77,6 +87,7 @@ export function useProducts() {
     deleteProducts,
     deleteByCategory,
     getProductsByCategory,
+    toggleFavorite,
     reload,
   };
 }
