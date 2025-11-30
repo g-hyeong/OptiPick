@@ -26,6 +26,7 @@ interface CompareTableProps {
   onProductReorder: (newOrder: string[]) => void;
   onCriteriaReorder: (newOrder: string[]) => void;
   onProductHide: (name: string) => void;
+  onProductClick: (name: string) => void;
   isUserCriterion: (c: string) => boolean;
 }
 

@@ -8,6 +8,7 @@ interface ProductColumnHeaderProps {
   thumbnailUrl?: string;
   productUrl?: string;
   onHide: () => void;
+  onProductClick: () => void;
 }
 
 // 드래그 핸들 아이콘
@@ -54,8 +55,8 @@ export function ProductColumnHeader({
   id,
   productName,
   thumbnailUrl,
-  productUrl,
   onHide,
+  onProductClick,
 }: ProductColumnHeaderProps) {
   const {
     attributes,
@@ -94,28 +95,26 @@ export function ProductColumnHeader({
       <div className="flex flex-col items-center gap-2 mt-4">
         {/* 썸네일 + 오버레이 X 버튼 */}
         <div className="relative">
-          {thumbnailUrl ? (
-            <a
-              href={productUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block"
-            >
+          <button
+            onClick={onProductClick}
+            className="block cursor-pointer"
+          >
+            {thumbnailUrl ? (
               <img
                 src={thumbnailUrl}
                 alt={productName}
                 className={cn(
                   "w-16 h-16 object-cover rounded-lg",
-                  "ring-2 ring-transparent group-hover:ring-primary-200",
+                  "ring-2 ring-transparent hover:ring-primary-400",
                   "transition-all duration-200"
                 )}
               />
-            </a>
-          ) : (
-            <div className="w-16 h-16 bg-warm-100 rounded-lg flex items-center justify-center">
-              <span className="text-warm-400 text-2xl">?</span>
-            </div>
-          )}
+            ) : (
+              <div className="w-16 h-16 bg-warm-100 rounded-lg flex items-center justify-center hover:bg-warm-200 transition-colors">
+                <span className="text-warm-400 text-2xl">?</span>
+              </div>
+            )}
+          </button>
 
           {/* 숨기기 버튼 - hover 시 썸네일 우상단에 오버레이 */}
           <button
@@ -137,19 +136,17 @@ export function ProductColumnHeader({
         </div>
 
         {/* 제품명 (truncate) */}
-        <a
-          href={productUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={onProductClick}
           className={cn(
             "font-medium text-sm text-primary-800 hover:text-primary-600",
-            "max-w-[120px] truncate block",
+            "max-w-[120px] truncate block cursor-pointer",
             "transition-colors duration-150"
           )}
           title={productName}
         >
           {productName}
-        </a>
+        </button>
       </div>
     </th>
   );

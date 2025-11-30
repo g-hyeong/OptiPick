@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button, Input, Chip, Card } from "@/components/ui";
 import { DuplicateProductDialog } from "@/components/ui/DuplicateProductDialog";
 import { useProductsContext } from "@/context";
@@ -18,65 +18,64 @@ export function ExtractPage() {
   const [duplicateProduct, setDuplicateProduct] = useState<StoredProduct | null>(null);
   const pollingRef = useRef<number | null>(null);
 
+  // 폴링 중지 헬퍼
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  // Task 상태 폴링 함수
+  const pollTaskState = useCallback(async (options?: { onComplete?: () => void }) => {
+    try {
+      const response = await sendMessage<{ success: boolean; task?: { status: string; message?: string; error?: string } }>({ type: "GET_TASK_STATE" });
+      if (response.success && response.task) {
+        const task = response.task;
+
+        // 중복 감지 대기 상태
+        if (task.status === "waiting_duplicate_choice") {
+          // 메시지 API로 duplicateCheckData 요청
+          const dupResponse = await sendMessage<{ success: boolean; data?: { duplicateProduct: StoredProduct } }>({ type: "GET_DUPLICATE_DATA" });
+          if (dupResponse.success && dupResponse.data) {
+            setDuplicateProduct(dupResponse.data.duplicateProduct);
+            setShowDuplicateDialog(true);
+            setMessage("중복된 제품이 발견되었습니다.");
+            stopPolling();
+          }
+        } else if (task.status === "completed") {
+          setMessage(task.message || "제품 추출이 완료되었습니다.");
+          setLoading(false);
+          stopPolling();
+          options?.onComplete?.();
+        } else if (task.status === "failed") {
+          setMessage(task.error || "제품 추출에 실패했습니다.");
+          setLoading(false);
+          stopPolling();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to poll task state:", error);
+    }
+  }, [sendMessage, stopPolling]);
+
+  // 폴링 시작 헬퍼
+  const startPolling = useCallback((options?: { onComplete?: () => void }) => {
+    stopPolling();
+    pollTaskState(options);
+    pollingRef.current = window.setInterval(() => pollTaskState(options), 1000);
+  }, [pollTaskState, stopPolling]);
+
   // Task 상태 폴링
   useEffect(() => {
-    const pollTaskState = async () => {
-      try {
-        const response = await sendMessage<{ success: boolean; task?: { status: string; message?: string; error?: string } }>({ type: "GET_TASK_STATE" });
-        if (response.success && response.task) {
-          const task = response.task;
-
-          // 중복 감지 대기 상태
-          if (task.status === "waiting_duplicate_choice") {
-            // duplicateCheckData를 Storage에서 읽기
-            const result = await chrome.storage.local.get("duplicateCheckData");
-            if (result.duplicateCheckData) {
-              setDuplicateProduct(result.duplicateCheckData.duplicateProduct);
-              setShowDuplicateDialog(true);
-              setMessage("중복된 제품이 발견되었습니다.");
-              // 폴링 중지
-              if (pollingRef.current) {
-                clearInterval(pollingRef.current);
-                pollingRef.current = null;
-              }
-            }
-          } else if (task.status === "completed") {
-            setMessage(task.message || "제품 추출이 완료되었습니다.");
-            setLoading(false);
-            // 폴링 중지
-            if (pollingRef.current) {
-              clearInterval(pollingRef.current);
-              pollingRef.current = null;
-            }
-          } else if (task.status === "failed") {
-            setMessage(task.error || "제품 추출에 실패했습니다.");
-            setLoading(false);
-            // 폴링 중지
-            if (pollingRef.current) {
-              clearInterval(pollingRef.current);
-              pollingRef.current = null;
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to poll task state:", error);
-      }
-    };
-
     if (loading && !pollingRef.current) {
-      // 즉시 한 번 실행
-      pollTaskState();
-      // 1초마다 폴링
-      pollingRef.current = window.setInterval(pollTaskState, 1000);
+      startPolling();
     }
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-        pollingRef.current = null;
-      }
+      stopPolling();
     };
-  }, [loading, sendMessage]);
+  }, [loading, startPolling, stopPolling]);
 
   const handleExtract = async () => {
     if (!category.trim()) {
@@ -136,36 +135,7 @@ export function ExtractPage() {
       });
 
       // 폴링 재시작 (완료 대기)
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current);
-      }
-      const pollTaskState = async () => {
-        try {
-          const response = await sendMessage<{ success: boolean; task?: { status: string; message?: string; error?: string } }>({ type: "GET_TASK_STATE" });
-          if (response.success && response.task) {
-            const task = response.task;
-            if (task.status === "completed") {
-              setMessage(task.message || "작업이 완료되었습니다.");
-              setLoading(false);
-              setCategory("");
-              if (pollingRef.current) {
-                clearInterval(pollingRef.current);
-                pollingRef.current = null;
-              }
-            } else if (task.status === "failed") {
-              setMessage(task.error || "작업에 실패했습니다.");
-              setLoading(false);
-              if (pollingRef.current) {
-                clearInterval(pollingRef.current);
-                pollingRef.current = null;
-              }
-            }
-          }
-        } catch (error) {
-          console.error("Failed to poll task state:", error);
-        }
-      };
-      pollingRef.current = window.setInterval(pollTaskState, 1000);
+      startPolling({ onComplete: () => setCategory("") });
     } catch (error) {
       console.error("Failed to send duplicate choice:", error);
       setMessage("선택 전송에 실패했습니다.");

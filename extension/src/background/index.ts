@@ -417,7 +417,7 @@ async function submitComparisonCriteria(userCriteria: string[]): Promise<void> {
 async function handleDuplicateChoice(choice: 'update' | 'save_new' | 'cancel'): Promise<void> {
   try {
     const currentTask = await getTaskState();
-    if (!currentTask || (currentTask.status as string) !== 'waiting_duplicate_choice') {
+    if (!currentTask || currentTask.status !== 'waiting_duplicate_choice') {
       throw new Error('중복 선택 대기 중인 작업이 없습니다.');
     }
 

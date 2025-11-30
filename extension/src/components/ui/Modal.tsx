@@ -32,6 +32,7 @@ const ModalContent = React.forwardRef<
     <ModalOverlay />
     <DialogPrimitive.Content
       ref={ref}
+      aria-describedby={undefined}
       className={cn(
         "fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%]",
         "bg-white rounded-xl shadow-xl p-6",

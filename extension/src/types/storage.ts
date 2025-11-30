@@ -44,7 +44,8 @@ export type AnalysisTaskStatus =
   | 'analyzing'
   | 'saving'
   | 'completed'
-  | 'failed';
+  | 'failed'
+  | 'waiting_duplicate_choice';
 
 /**
  * 진행 중인 분석 작업

@@ -2,6 +2,13 @@ import type { ExtractedContent } from '@/types/content';
 import { extractPageContent } from './parsers';
 
 /**
+ * Content Script 메시지 타입
+ */
+type ContentMessage =
+  | { type: 'EXTRACT_CONTENT' }
+  | { type: 'PING' };
+
+/**
  * Content Script 초기화
  */
 function init(): void {
@@ -9,7 +16,7 @@ function init(): void {
 
   // 메시지 리스너 등록
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    handleMessage(message, sendResponse);
+    handleMessage(message as ContentMessage, sendResponse);
     // 비동기 응답을 위해 true 반환
     return true;
   });
@@ -19,8 +26,8 @@ function init(): void {
  * 메시지 핸들러
  */
 function handleMessage(
-  message: any,
-  sendResponse: (response?: any) => void
+  message: ContentMessage,
+  sendResponse: (response: { success: boolean; data?: ExtractedContent; message?: string; error?: string }) => void
 ): void {
   try {
     switch (message.type) {
