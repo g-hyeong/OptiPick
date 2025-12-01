@@ -1,6 +1,7 @@
 """챗봇 메인 노드 - LLM 호출 및 응답 생성"""
 
 import os
+import re
 from typing import Any
 
 from langchain_core.messages import AIMessage, SystemMessage
@@ -85,6 +86,32 @@ def _extract_sources_from_response(response: Any) -> list[str]:
     return sources[:5]  # 최대 5개 출처만 반환
 
 
+def _remove_citation_tags(text: str) -> str:
+    """응답에서 인용 태그 제거
+
+    Gemini Google Search grounding 사용 시 자동 생성되는 인용 태그를 제거합니다.
+
+    Args:
+        text: 원본 응답 텍스트
+
+    Returns:
+        인용 태그가 제거된 텍스트
+    """
+    # [cite: ...] 패턴 제거 (대괄호 안에 cite: 로 시작하는 모든 내용)
+    text = re.sub(r"\s*\[cite:\s*[^\]]*\]", "", text)
+
+    # [출처: ...] 패턴도 제거
+    text = re.sub(r"\s*\[출처:\s*[^\]]*\]", "", text)
+
+    # 연속된 공백 정리
+    text = re.sub(r" +", " ", text)
+
+    # 줄 끝 공백 정리
+    text = re.sub(r" +\n", "\n", text)
+
+    return text.strip()
+
+
 async def chat_node(state: ChatbotState) -> dict:
     """
     챗봇 메인 노드 - 사용자 메시지에 대한 응답 생성
@@ -152,8 +179,9 @@ async def chat_node(state: ChatbotState) -> dict:
         else:
             response = await llm.ainvoke(full_messages)
 
-        # 응답 내용 추출
+        # 응답 내용 추출 및 인용 태그 제거
         response_content = response.content if hasattr(response, "content") else str(response)
+        response_content = _remove_citation_tags(response_content)
         logger.info(f"  Response length: {len(response_content)} chars")
 
         # 출처 추출

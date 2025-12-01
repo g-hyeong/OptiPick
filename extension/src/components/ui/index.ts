@@ -28,3 +28,4 @@ export {
   type ToastActionElement,
 } from "./Toast";
 export { ComparisonDialog } from "./ComparisonDialog";
+export { default as ProductDetailModal } from "./ProductDetailModal";

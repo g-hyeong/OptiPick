@@ -1,9 +1,14 @@
 """제품 분석 노드 - LLM을 사용하여 텍스트와 이미지 정보로부터 제품 분석 수행"""
 
+import json
+import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List
 
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI, HarmBlockThreshold, HarmCategory
 from pydantic import BaseModel, Field
 
 from src.config.base import BaseSettings
@@ -136,6 +141,147 @@ def create_default_analysis() -> ProductAnalysis:
     )
 
 
+# ============================================================================
+# WEB SEARCH BASED ANALYSIS (Generic 파서용)
+# ============================================================================
+
+
+def _create_llm_with_search() -> ChatGoogleGenerativeAI:
+    """Google Search grounding이 활성화된 Gemini LLM 생성
+
+    Returns:
+        ChatGoogleGenerativeAI 인스턴스
+    """
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+    if not google_api_key:
+        raise ValueError("GOOGLE_API_KEY not found in environment variables")
+
+    # Safety filters 해제
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+
+    return ChatGoogleGenerativeAI(
+        model=settings.default_llm_model,
+        api_key=google_api_key,
+        temperature=0.5,
+        safety_settings=safety_settings,
+    )
+
+
+def _parse_json_from_response(response_content: str) -> dict:
+    """LLM 응답에서 JSON 추출 및 파싱
+
+    Args:
+        response_content: LLM 응답 텍스트
+
+    Returns:
+        파싱된 JSON dict
+    """
+    # JSON 블록 추출 시도 (```json ... ```)
+    json_match = re.search(r"```json\s*([\s\S]*?)\s*```", response_content)
+    if json_match:
+        json_str = json_match.group(1)
+    else:
+        # JSON 블록이 없으면 전체를 JSON으로 파싱 시도
+        json_str = response_content
+
+    return json.loads(json_str)
+
+
+async def _analyze_with_web_search(title: str, url: str, page_text: str = "") -> ProductAnalysis:
+    """웹 검색을 활용한 제품 분석 (Generic 파서용)
+
+    Args:
+        title: 페이지 제목 (document.title)
+        url: 페이지 URL
+        page_text: 페이지에서 추출한 텍스트 (선택)
+
+    Returns:
+        ProductAnalysis 결과
+    """
+    logger.info("  Using web search for product analysis...")
+    if page_text:
+        logger.info(f"  Page text length: {len(page_text)} chars")
+
+    try:
+        # 1. Google Search grounding이 활성화된 LLM 생성
+        llm = _create_llm_with_search()
+
+        # 2. 프롬프트 구성 (페이지 텍스트 포함)
+        messages = analyze_product.build_web_search_messages(title, url, page_text)
+        full_messages = [
+            SystemMessage(content=messages[0]["content"]),
+            HumanMessage(content=messages[1]["content"]),
+        ]
+
+        # 3. Google Search tool 추가
+        try:
+            from google.ai.generativelanguage_v1beta.types import Tool as GenAITool
+
+            tools = [GenAITool(google_search={})]
+            logger.info("    Google Search grounding enabled")
+        except ImportError:
+            logger.warning("    Google Search grounding not available")
+            tools = None
+
+        # 4. LLM 호출
+        logger.info("    Calling LLM with web search...")
+        if tools:
+            response = await llm.ainvoke(full_messages, tools=tools)
+        else:
+            response = await llm.ainvoke(full_messages)
+
+        # 5. 응답 파싱
+        response_content = response.content if hasattr(response, "content") else str(response)
+        logger.info(f"    Response length: {len(response_content)} chars")
+
+        # 웹 검색 수행 여부 확인 (grounding_metadata 로깅)
+        if hasattr(response, "response_metadata"):
+            metadata = response.response_metadata
+            grounding_metadata = metadata.get("grounding_metadata", {})
+            web_search_queries = grounding_metadata.get("web_search_queries", [])
+            grounding_chunks = grounding_metadata.get("grounding_chunks", [])
+
+            if web_search_queries:
+                logger.info(f"    Web search performed: {web_search_queries}")
+            if grounding_chunks:
+                logger.info(f"    Grounding sources: {len(grounding_chunks)} chunks")
+            if not web_search_queries and not grounding_chunks:
+                logger.warning("    No web search grounding detected - LLM may have used internal knowledge only")
+
+        # 6. JSON 추출 및 ProductAnalysis 변환
+        try:
+            result_dict = _parse_json_from_response(response_content)
+
+            product_analysis: ProductAnalysis = {
+                "product_name": result_dict.get("product_name", "unknown"),
+                "summary": result_dict.get("summary", "unknown"),
+                "price": result_dict.get("price", "unknown"),
+                "key_features": result_dict.get("key_features", []),
+                "pros": result_dict.get("pros", []),
+                "cons": result_dict.get("cons", []),
+                "recommended_for": result_dict.get("recommended_for", "unknown"),
+                "recommendation_reasons": result_dict.get("recommendation_reasons", []),
+                "not_recommended_reasons": result_dict.get("not_recommended_reasons", []),
+            }
+
+            logger.info(f"    Extracted product: {product_analysis['product_name'][:50]}")
+            return product_analysis
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"    Failed to parse response JSON: {e}")
+            logger.debug(f"    Response content: {response_content[:500]}...")
+            return create_default_analysis()
+
+    except Exception as e:
+        logger.error(f"    Web search analysis failed: {str(e)}")
+        return create_default_analysis()
+
+
 async def analyze_product_node(state: SummarizePageState) -> dict:
     """텍스트와 이미지 정보를 분석하여 제품 분석 결과를 생성하는 노드"""
     try:
@@ -143,17 +289,36 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
         images = state.get("images", [])  # OCR 결과가 포함된 이미지
         domain_type = parsed_content.get("domain_type", "generic")
 
+        page_title = state.get("title", "")
         logger.info(f"━━━ Analyze Product Node ━━━")
         logger.info(f"  Domain Type: {domain_type}")
+        logger.info(f"  Page Title: {page_title[:80]}{'...' if len(page_title) > 80 else ''}")
 
-        # 1. parsed_content에서 텍스트 추출
+        # 1. Generic 파서: 웹 검색 + 페이지 텍스트 기반 분석
         if domain_type == "generic":
-            # Generic 파서: texts 필드 사용
-            # Fallback: LLM validation에서 description_texts로 저장된 경우도 처리
+            logger.info("  Using web search based analysis for generic parser")
+            page_url = state.get("url", "")
+
+            # 페이지 텍스트 추출 (parsed_content.texts에서)
             texts = parsed_content.get("texts", [])
-            if not texts:
-                texts = parsed_content.get("description_texts", [])
-            logger.info(f"  Input (Generic): {len(texts)} texts, {len(images)} images")
+            page_text_lines = []
+            for text in sorted(texts, key=lambda t: t.get("position", 0)):
+                content = text.get("content", "").strip()
+                if content:
+                    page_text_lines.append(content)
+            page_text = "\n".join(page_text_lines)
+
+            logger.info(f"  Extracted texts: {len(texts)} items, {len(page_text)} chars")
+
+            # 웹 검색 + 페이지 텍스트 기반 분석 수행
+            product_analysis = await _analyze_with_web_search(page_title, page_url, page_text)
+
+            # llm_input_content: 페이지 텍스트 포함
+            llm_input_content = f"제품명: {page_title}\nURL: {page_url}\n\n{page_text}"
+
+            return {"product_analysis": product_analysis, "llm_input_content": llm_input_content}
+
+        # 2. 도메인 특화 파서: 기존 로직 사용
         else:
             # 도메인 특화 파서: 구조화된 데이터를 ExtractedText 형태로 변환
             texts = []
@@ -188,7 +353,7 @@ async def analyze_product_node(state: SummarizePageState) -> dict:
             return {"product_analysis": create_default_analysis(), "llm_input_content": ""}
 
         # 2. 프롬프트 구성 및 입력 데이터 저장
-        messages = analyze_product.build_messages(texts, images)
+        messages = analyze_product.build_messages(texts, images, page_title)
 
         # 디버깅: LLM 입력 데이터를 logs/YYYY-MM-DD/processed_source.txt에 저장
         try:

@@ -28,6 +28,8 @@ export interface ExtractedContent {
   title: string;
   /** 정제된 HTML body */
   html_body: string;
+  /** og:image 메타 태그에서 추출한 대표 이미지 URL */
+  og_image?: string;
   /** 추출 시점 */
   timestamp: number;
 }
@@ -56,6 +58,7 @@ export interface ProductAnalysisRequest {
   url: string;
   title: string;
   html_body: string;
+  og_image?: string;
   timestamp: number;
 }
 

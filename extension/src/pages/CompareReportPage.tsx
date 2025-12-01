@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useCompareState, useChatbot } from "@/hooks";
 import { CompareTable, CompareToolbar } from "@/components/compare";
 import { ChatSidebar } from "@/components/chatbot";
-import { Card } from "@/components/ui";
+import { Card, ProductDetailModal } from "@/components/ui";
 import type { ProductContext } from "@/types/chatbot";
+import type { StoredProduct } from "@/types/storage";
 
 export function CompareReportPage() {
   // URL 파라미터에서 historyId 추출
@@ -29,6 +30,25 @@ export function CompareReportPage() {
 
   // 챗봇 상태
   const chatbot = useChatbot();
+
+  // 제품 상세 모달 상태
+  const [selectedProduct, setSelectedProduct] = useState<StoredProduct | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // 제품 클릭 핸들러
+  const handleProductClick = (productName: string) => {
+    const product = getProductInfo(productName);
+    if (product) {
+      setSelectedProduct(product);
+      setIsDetailModalOpen(true);
+    }
+  };
+
+  // 모달 닫기
+  const handleCloseModal = () => {
+    setIsDetailModalOpen(false);
+    setSelectedProduct(null);
+  };
 
   // 리포트 로드 시 챗봇 세션 시작
   useEffect(() => {
@@ -140,6 +160,7 @@ export function CompareReportPage() {
               onProductReorder={reorderProducts}
               onCriteriaReorder={reorderCriteria}
               onProductHide={hideProduct}
+              onProductClick={handleProductClick}
               isUserCriterion={isUserCriterion}
             />
           </Card>
@@ -172,6 +193,14 @@ export function CompareReportPage() {
         currentThreadId={chatbot.threadId}
         onNewChat={chatbot.startNewChat}
         onSwitchSession={chatbot.switchSession}
+      />
+
+      {/* 제품 상세 모달 */}
+      <ProductDetailModal
+        product={selectedProduct}
+        isOpen={isDetailModalOpen}
+        onClose={handleCloseModal}
+        onToggleFavorite={() => {}}
       />
     </div>
   );

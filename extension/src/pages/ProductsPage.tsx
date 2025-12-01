@@ -55,11 +55,15 @@ const MoreIcon = () => (
 
 type TabType = "products" | "history";
 
-export function ProductsPage() {
+interface ProductsPageProps {
+  initialTab?: TabType;
+}
+
+export function ProductsPage({ initialTab = "products" }: ProductsPageProps) {
   const { state } = useApp();
   const { products, deleteProduct, deleteProducts, renameCategory, deleteCategory, toggleFavorite: toggleProductFavorite } = useProductsContext();
   const { history, deleteHistoryItem, toggleFavorite: toggleHistoryFavorite } = useAnalysisHistory();
-  const [activeTab, setActiveTab] = useState<TabType>("products");
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [selectedProduct, setSelectedProduct] = useState<StoredProduct | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 

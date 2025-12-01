@@ -13,6 +13,8 @@ function AppContent() {
         return <ExtractPage />;
       case "products":
         return <ProductsPage />;
+      case "history":
+        return <ProductsPage initialTab="history" />;
       case "compare":
         return <ComparePage />;
       default:

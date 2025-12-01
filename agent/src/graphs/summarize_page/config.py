@@ -17,4 +17,4 @@ class SummarizePageSettings(BaseSettings):
     ocr_scale: bool = False  # 업스케일링 비활성화 (처리 속도 우선)
 
     # 병렬 처리 설정
-    ocr_max_concurrent: int = 5  # 동시 OCR 요청 최대 개수
+    ocr_max_concurrent: int = 30  # 동시 OCR 요청 최대 개수

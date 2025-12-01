@@ -76,10 +76,16 @@ async def parse_content_node(state: SummarizePageState) -> dict:
 
         logger.info(f"  Extracted: {len(texts)} texts, {len(images)} images")
 
-        # 3. ParsedContent 구성
+        # 3. og:image를 thumbnail로 사용 (generic 파서)
+        og_image = state.get("og_image", "")
+        if og_image:
+            logger.info(f"  Using og:image as thumbnail: {og_image[:80]}...")
+
+        # 4. ParsedContent 구성
         parsed_content = ParsedContent(
             domain_type="generic",
             texts=texts,
+            thumbnail=og_image if og_image else "",
         )
 
         return {

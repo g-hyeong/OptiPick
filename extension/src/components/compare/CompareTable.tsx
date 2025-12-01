@@ -38,6 +38,7 @@ export function CompareTable({
   onProductReorder,
   onCriteriaReorder,
   onProductHide,
+  onProductClick,
   isUserCriterion,
 }: CompareTableProps) {
   // 드래그 센서 설정
@@ -99,8 +100,8 @@ export function CompareTable({
                       id={productName}
                       productName={productName}
                       thumbnailUrl={productInfo?.thumbnailUrl}
-                      productUrl={productInfo?.url}
                       onHide={() => onProductHide(productName)}
+                      onProductClick={() => onProductClick(productName)}
                     />
                   );
                 })}

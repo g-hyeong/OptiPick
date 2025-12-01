@@ -150,7 +150,10 @@ export function Sidebar() {
       {totalHistoryCount > 0 && (
         <div className="p-4 border-t border-warm-200">
           <button
-            onClick={() => setCurrentPage("history")}
+            onClick={() => {
+              setSelectedCategory(null);
+              setCurrentPage("history");
+            }}
             className="w-full flex items-center justify-between text-sm text-primary-600 hover:text-primary-800 transition-colors"
           >
             <span>전체 분석 기록 ({totalHistoryCount})</span>

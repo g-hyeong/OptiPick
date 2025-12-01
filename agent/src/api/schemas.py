@@ -47,6 +47,7 @@ class SummarizePageRequest(BaseModel):
     url: str = Field(..., description="페이지 URL")
     title: str = Field(..., description="페이지 제목")
     html_body: str = Field(..., description="정제된 HTML body")
+    og_image: Optional[str] = Field(None, description="og:image 메타 태그에서 추출한 대표 이미지 URL")
     timestamp: int = Field(..., description="추출 시각 (Unix timestamp)")
 
 

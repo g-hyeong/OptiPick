@@ -45,6 +45,7 @@ async def execute_summarize_page(request: SummarizePageRequest):
             "url": request.url,
             "title": request.title,
             "html_body": request.html_body,
+            "og_image": request.og_image,
             "timestamp": request.timestamp,
         }
 

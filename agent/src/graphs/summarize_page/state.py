@@ -48,12 +48,13 @@ class ProductAnalysis(TypedDict):
     not_recommended_reasons: list[str]  # 비추천 이유
 
 
-class SummarizePageState(TypedDict):
+class SummarizePageState(TypedDict, total=False):
     """SummarizePage 그래프의 State"""
     # Extension으로부터 받는 입력
     url: str
     title: str
     html_body: str  # 정제된 HTML body
+    og_image: str  # og:image 메타 태그에서 추출한 대표 이미지 URL
     timestamp: int
 
     # 페이지 검증 결과

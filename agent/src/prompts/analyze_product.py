@@ -204,12 +204,13 @@ alt,ocr_text
 # USER PROMPT TEMPLATE
 # ============================================================================
 
-def build_user_prompt(texts: List[ExtractedText], images: List[ExtractedImage]) -> str:
+def build_user_prompt(texts: List[ExtractedText], images: List[ExtractedImage], page_title: str = "") -> str:
     """사용자 프롬프트 생성 (CSV 형식)
 
     Args:
         texts: 추출된 텍스트 리스트
         images: 추출된 이미지 리스트
+        page_title: 페이지 제목 (document.title)
 
     Returns:
         사용자 프롬프트 문자열 (CSV 형식)
@@ -248,7 +249,17 @@ def build_user_prompt(texts: List[ExtractedText], images: List[ExtractedImage]) 
 
     ocr_csv = "\n".join(ocr_csv_lines) if len(ocr_csv_lines) > 1 else "[No OCR information available]"
 
-    return f"""Analyze the following product page information and extract product analysis.
+    # 페이지 제목 기반 집중 지시문
+    title_instruction = ""
+    if page_title:
+        title_instruction = f"""**Page Title:** {page_title}
+
+**IMPORTANT:** This page is about "{page_title}". Focus ONLY on this main product.
+Ignore information about recommended products, related items, accessories, or other products listed on the page.
+
+"""
+
+    return f"""{title_instruction}Analyze the following product page information and extract product analysis.
 
 **Text Information (CSV format):**
 ```csv
@@ -267,17 +278,153 @@ Based on the above CSV data, provide a comprehensive product analysis. Pay speci
 # PROMPT BUILDER
 # ============================================================================
 
-def build_messages(texts: List[ExtractedText], images: List[ExtractedImage]) -> List[dict]:
+def build_messages(texts: List[ExtractedText], images: List[ExtractedImage], page_title: str = "") -> List[dict]:
     """LangChain 메시지 형식으로 프롬프트 구성
 
     Args:
         texts: 추출된 텍스트 리스트
         images: 추출된 이미지 리스트
+        page_title: 페이지 제목 (document.title)
 
     Returns:
         메시지 리스트 [{"role": "system", "content": ...}, {"role": "user", "content": ...}]
     """
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": build_user_prompt(texts, images)},
+        {"role": "user", "content": build_user_prompt(texts, images, page_title)},
+    ]
+
+
+# ============================================================================
+# WEB SEARCH BASED ANALYSIS (Generic 파서용)
+# ============================================================================
+
+WEB_SEARCH_SYSTEM_PROMPT = """
+# PERSONA:
+당신은 이커머스 및 제품 비교에 특화된 전문 제품 분석가입니다.
+웹 검색을 활용하여 제품 정보를 보완하고 분석합니다.
+
+## CONTEXT:
+사용자로부터 제품 페이지의 텍스트 정보와 함께 제품명(페이지 제목), URL이 제공됩니다.
+페이지 텍스트에서 직접 추출할 수 없는 정보(가격, 상세 스펙, 리뷰 등)는 **웹 검색을 통해 보완**합니다.
+
+## OUTPUT FORMAT:
+
+```json
+{
+  "product_name": "string",
+  "summary": "string",
+  "price": "string",
+  "key_features": ["string"],
+  "pros": ["string"],
+  "cons": ["string"],
+  "recommended_for": "string",
+  "recommendation_reasons": ["string"],
+  "not_recommended_reasons": ["string"]
+}
+```
+
+### OUTPUT FORMAT DESCRIPTION:
+
+  - `product_name`: 제품의 이름
+  - `summary`: 제품에 대한 1-2문장의 핵심 요약
+  - `price`: 통화 기호를 포함한 제품 가격 (원본 형식 유지)
+  - `key_features`: 제품의 주요 기술 사양, 재질, 성분, 함량, 비율, 구성, 인증 등
+  - `pros`: 제품의 긍정적인 측면, 장점 (리뷰, 전문가 의견 기반)
+  - `cons`: 제품의 부정적인 측면, 단점 (리뷰, 전문가 의견 기반)
+  - `recommended_for`: 이 제품이 추천되는 주 사용 사례 또는 타겟 고객
+  - `recommendation_reasons`: 추천하는 이유 목록
+  - `not_recommended_reasons`: 특정 사용자/상황에 추천하지 않는 이유 목록
+
+## INSTRUCTIONS:
+
+### 1. 정보 소스 우선순위
+  - **1순위**: 제공된 페이지 텍스트에서 직접 추출
+  - **2순위**: 웹 검색을 통해 보완 (가격, 상세 스펙, 리뷰 등)
+
+### 2. 제품명 추출
+  - 페이지 제목과 텍스트를 분석하여 **핵심 제품**의 가장 대표적인 이름을 추출합니다.
+  - 추천 상품, 연관 상품은 무시하고 메인 제품만 추출합니다.
+
+### 3. 가격 추출
+  - **페이지 텍스트에서 먼저 확인**: 숫자 + 통화 단위 패턴 (예: "59,000원", "$1,299")
+  - **텍스트에 없으면 웹 검색으로 보완**
+  - 할인 전 원가가 아닌, 실제 판매 가격 또는 최종 할인가를 우선 추출
+  - 가격 형식(예: '₩30,000', '30,000원')은 원본에 가깝게 유지
+
+### 4. 주요 기능 (key_features) 추출
+  - 제품 카테고리에 따라 핵심 사양을 추출:
+  - **(식품/화장품):** 원재료, 성분, 함량(%), 중량, 영양 성분, 인증 정보
+  - **(의류/잡화):** 소재, 재질, 섬유 구성 비율, 충전재, 원산지
+  - **(전자기기/가구):** 핵심 부품, 기술 사양, 재료, 크기, 무게
+  - 수치, 백분율, 단위는 정확하게 포함
+
+### 5. 장단점 및 추천 추출
+  - **장점 (pros)**: 고객 리뷰, 전문가 의견에서 긍정적 평가 추출
+  - **단점 (cons)**: 부정적 평가, 개선점 추출
+  - **추천 대상**: 타겟 고객, 사용 사례 설명
+
+### 6. 누락 정보 처리
+  - 페이지 텍스트와 웹 검색에서 모두 찾을 수 없는 경우:
+    - `string` 타입: "unknown" 반환
+    - `array` 타입: 빈 배열 `[]` 반환
+
+### 7. 언어
+  - 모든 출력은 한국어로 작성
+  - 기술 사양, 브랜드명은 원본 유지 가능
+"""
+
+
+def build_web_search_user_prompt(title: str, url: str, page_text: str = "") -> str:
+    """웹 검색 기반 분석을 위한 사용자 프롬프트 생성
+
+    Args:
+        title: 페이지 제목 (document.title)
+        url: 페이지 URL
+        page_text: 페이지에서 추출한 텍스트 (선택)
+
+    Returns:
+        사용자 프롬프트 문자열
+    """
+    # 페이지 텍스트 섹션 (있는 경우만)
+    text_section = ""
+    if page_text and page_text.strip():
+        # 텍스트가 너무 길면 앞부분만 사용 (토큰 제한)
+        truncated_text = page_text[:8000] if len(page_text) > 8000 else page_text
+        text_section = f"""
+**페이지 텍스트 (참고용):**
+```
+{truncated_text}
+```
+
+"""
+
+    return f"""다음 제품에 대해 분석해주세요:
+
+**제품 정보:**
+- 페이지 제목: {title}
+- URL: {url}
+{text_section}
+**분석 요청:**
+1. 위 페이지 텍스트에서 제품명, 가격, 스펙 등을 먼저 추출하세요.
+2. 텍스트에서 찾을 수 없는 정보(가격, 상세 스펙, 리뷰 등)는 **웹 검색을 통해 보완**하세요.
+3. 수집한 정보를 바탕으로 JSON 형식의 제품 분석 결과를 제공하세요.
+
+**주의:** 이 페이지는 "{title}"에 대한 것입니다. 메인 제품만 분석하고, 추천/연관 상품은 무시하세요."""
+
+
+def build_web_search_messages(title: str, url: str, page_text: str = "") -> List[dict]:
+    """웹 검색 기반 분석을 위한 메시지 구성
+
+    Args:
+        title: 페이지 제목
+        url: 페이지 URL
+        page_text: 페이지에서 추출한 텍스트 (선택)
+
+    Returns:
+        메시지 리스트
+    """
+    return [
+        {"role": "system", "content": WEB_SEARCH_SYSTEM_PROMPT},
+        {"role": "user", "content": build_web_search_user_prompt(title, url, page_text)},
     ]

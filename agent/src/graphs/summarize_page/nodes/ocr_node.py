@@ -17,9 +17,17 @@ async def ocr_node(state: SummarizePageState) -> dict:
     try:
         # state에서 이미지 가져오기 (validate_page_node에서 추출됨)
         images = list(state.get("images", []))
+        parsed_content = state.get("parsed_content", {})
+        domain_type = parsed_content.get("domain_type", "generic")
 
         logger.info(f"━━━ OCR Node ━━━")
         logger.info(f"  Input: {len(images)} images from state")
+        logger.info(f"  Domain Type: {domain_type}")
+
+        # Generic 파서는 웹 검색 기반이므로 OCR 스킵
+        if domain_type == "generic":
+            logger.info("  Skipping OCR for generic parser (using web search instead)")
+            return {"images": images}
 
         if not images:
             logger.info("  No images to process, skipping OCR")

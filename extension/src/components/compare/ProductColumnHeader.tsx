@@ -6,7 +6,6 @@ interface ProductColumnHeaderProps {
   id: string;
   productName: string;
   thumbnailUrl?: string;
-  productUrl?: string;
   onHide: () => void;
   onProductClick: () => void;
 }
